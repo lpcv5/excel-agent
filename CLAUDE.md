@@ -48,12 +48,19 @@ def my_tool(param: str) -> str:
 
 ### DeepAgents Configuration
 
-The agent is configured in `create_excel_agent()` with:
+The agent is configured in `create_excel_agent()` using `create_deep_agent()` from the DeepAgents harness with:
+
 - `model`: LLM provider (default: anthropic:claude-sonnet-4-20250514)
-- `tools`: EXCEL_TOOLS list from excel_tools.py
-- `memory`: AGENTS.md path
-- `skills`: skills/ directory path
+- `tools`: EXCEL_TOOLS list from excel_tools.py (custom Excel tools)
+- `memory`: Path to AGENTS.md file for persistent context
+- `skills`: Path to skills/ directory for specialized workflows
 - `backend`: FilesystemBackend for file operations
+
+The DeepAgents harness automatically provides these built-in tools:
+- `write_todos`: Manage a todo list for planning
+- `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`: File operations
+- `execute`: Run shell commands (not available with FilesystemBackend)
+- `task`: Delegate to subagents for isolated tasks
 
 ## Dependencies
 

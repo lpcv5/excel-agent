@@ -1,14 +1,6 @@
 ---
 name: report-generation
 description: Create formatted reports, summaries, and data exports from Excel data
-triggers:
-  - report
-  - summary
-  - export
-  - format
-  - 报表
-  - 汇总
-  - 导出
 ---
 
 # Report Generation Skill

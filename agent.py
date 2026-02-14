@@ -13,53 +13,79 @@ from typing import Optional
 
 from excel_tools import EXCEL_TOOLS
 
-# Check if deepagents is available
-try:
-    from deepagents import create_deep_agent
-    from deepagents.backends import FilesystemBackend
-
-    DEEPAGENTS_AVAILABLE = True
-except ImportError:
-    DEEPAGENTS_AVAILABLE = False
-    print("Warning: deepagents package not installed. Running in standalone mode.")
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+from langgraph.checkpoint.memory import MemorySaver
 
 
 def create_excel_agent(
-    model: str = "anthropic:claude-sonnet-4-20250514",
-    working_dir: Optional[str] = None,
+    model: str = "openai:gpt-5-mini",
 ):
     """
-    Create and configure the Excel Agent.
+    Create and configure the Excel Agent using DeepAgents harness.
 
     Args:
-        model: The LLM model to use (default: claude-sonnet-4)
+        model: The LLM model to use (default: openai:gpt-5-mini)
         working_dir: Working directory for file operations
 
     Returns:
-        Configured agent instance
+        Configured deep agent instance (CompiledStateGraph)
     """
-    if not DEEPAGENTS_AVAILABLE:
-        raise RuntimeError(
-            "deepagents package is required. Install it with: pip install deepagents"
-        )
+    work_dir = Path.cwd()
 
-    # Determine working directory
-    if working_dir is None:
-        working_dir = Path.cwd()
-    else:
-        working_dir = Path(working_dir)
+    # Get paths for memory and skills
+    base_path = Path(__file__).parent
+    agents_md_path = base_path / "AGENTS.md"
+    skills_path = base_path / "skills"
 
-    # Create the agent
+    # Configure memory (AGENTS.md)
+    memory_paths = []
+    if agents_md_path.exists():
+        memory_paths.append(str(agents_md_path))
+
+    # Configure skills directory
+    skills_paths = []
+    if skills_path.exists():
+        skills_paths.append(str(skills_path))
+
+    # Create the filesystem backend for file operations
+    backend = FilesystemBackend(root_dir=work_dir)
+
+    # Create checkpointer for conversation state persistence
+    checkpointer = MemorySaver()
+
+    # Create the deep agent with the DeepAgents harness
     agent = create_deep_agent(
         model=model,
         tools=EXCEL_TOOLS,
-        system_prompt=None,  # Will use AGENTS.md
-        memory=[str(Path(__file__).parent / "AGENTS.md")],
-        skills=[str(Path(__file__).parent / "skills")],
-        backend=FilesystemBackend(root_dir=str(working_dir)),
+        memory=memory_paths if memory_paths else None,
+        skills=skills_paths if skills_paths else None,
+        backend=backend,
+        checkpointer=checkpointer,
     )
 
     return agent
+
+
+def extract_response(result: dict) -> str:
+    """Extract response text from agent result."""
+    if "output" in result:
+        return result["output"]
+    elif "messages" in result and result["messages"]:
+        last_message = result["messages"][-1]
+        content = last_message.content
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text_parts.append(item.get("text", ""))
+                elif isinstance(item, str):
+                    text_parts.append(item)
+            return "".join(text_parts)
+        return str(content)
+    return "No response"
 
 
 def run_interactive(agent):
@@ -69,6 +95,9 @@ def run_interactive(agent):
     print("  Type your questions or commands. 'quit' to exit.")
     print("=" * 60)
     print()
+
+    # Use a thread_id for conversation persistence
+    thread_id = "interactive-session"
 
     while True:
         try:
@@ -81,11 +110,14 @@ def run_interactive(agent):
                 print("\nGoodbye!")
                 break
 
-            # Run the agent
-            result = agent.invoke({"input": user_input})
+            # Run the agent with configurable thread_id for state persistence
+            result = agent.invoke(
+                {"messages": [("user", user_input)]},
+                config={"configurable": {"thread_id": thread_id}},
+            )
 
             # Print the response
-            print(f"\nAgent: {result.get('output', 'No response')}\n")
+            print(f"\nAgent: {extract_response(result)}\n")
 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
@@ -97,8 +129,11 @@ def run_interactive(agent):
 def run_single_query(agent, query: str):
     """Run a single query and print the result."""
     try:
-        result = agent.invoke({"input": query})
-        print(result.get("output", "No response"))
+        result = agent.invoke(
+            {"messages": [("user", query)]},
+            config={"configurable": {"thread_id": "single-query"}},
+        )
+        print(extract_response(result))
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -136,8 +171,8 @@ Examples:
     parser.add_argument(
         "--model",
         "-m",
-        default="anthropic:claude-sonnet-4-20250514",
-        help="LLM model to use (default: claude-sonnet-4)",
+        default="openai:gpt-5-mini",
+        help="LLM model to use (default: openai:gpt-5-mini)",
     )
     parser.add_argument(
         "--dir",
@@ -169,23 +204,10 @@ Examples:
         print()
         return
 
-    # Check for deepagents availability
-    if not DEEPAGENTS_AVAILABLE:
-        print(
-            "Error: The 'deepagents' package is required but not installed.",
-            file=sys.stderr,
-        )
-        print("\nInstall it with:", file=sys.stderr)
-        print("  pip install deepagents", file=sys.stderr)
-        print("\nOr with uv:", file=sys.stderr)
-        print("  uv pip install deepagents", file=sys.stderr)
-        sys.exit(1)
-
     # Create the agent
     try:
         agent = create_excel_agent(
             model=args.model,
-            working_dir=args.dir,
         )
     except Exception as e:
         print(f"Error creating agent: {e}", file=sys.stderr)
