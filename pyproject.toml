@@ -26,7 +26,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["excel_com*", "skills*"]
+include = ["excel_com*", "excel_agent*", "ui*", "skills*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
