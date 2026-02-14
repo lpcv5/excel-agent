@@ -1,14 +1,6 @@
 ---
 name: formula-writing
 description: Generate and explain Excel formulas based on natural language descriptions
-triggers:
-  - formula
-  - calculate
-  - function
-  - equation
-  - 公式
-  - 计算
-  - 函数
 ---
 
 # Formula Writing Skill

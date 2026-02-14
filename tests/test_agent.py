@@ -6,28 +6,6 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 
-class TestCreateExcelAgent:
-    """Tests for create_excel_agent function."""
-
-    def test_create_excel_agent_raises_when_deepagents_not_available(self):
-        """Test create_excel_agent raises when deepagents not available."""
-        # Import the module first
-        import agent
-
-        # Save the original value
-        original_value = agent.DEEPAGENTS_AVAILABLE
-
-        try:
-            # Set the module-level variable
-            agent.DEEPAGENTS_AVAILABLE = False
-
-            with pytest.raises(RuntimeError, match="deepagents package is required"):
-                agent.create_excel_agent()
-        finally:
-            # Restore the original value
-            agent.DEEPAGENTS_AVAILABLE = original_value
-
-
 class TestRunInteractive:
     """Tests for run_interactive function."""
 
@@ -77,7 +55,10 @@ class TestRunInteractive:
 
         run_interactive(mock_agent)
 
-        mock_agent.invoke.assert_called_once_with({"input": "hello"})
+        mock_agent.invoke.assert_called_once_with(
+            {"messages": [("user", "hello")]},
+            config={"configurable": {"thread_id": "interactive-session"}}
+        )
 
     @patch("builtins.input", side_effect=KeyboardInterrupt())
     @patch("builtins.print")
@@ -119,7 +100,10 @@ class TestRunSingleQuery:
 
         run_single_query(mock_agent, "test query")
 
-        mock_agent.invoke.assert_called_once_with({"input": "test query"})
+        mock_agent.invoke.assert_called_once_with(
+            {"messages": [("user", "test query")]},
+            config={"configurable": {"thread_id": "single-query"}}
+        )
         mock_print.assert_called_with("Result text")
 
     @patch("builtins.print")
@@ -132,6 +116,10 @@ class TestRunSingleQuery:
 
         run_single_query(mock_agent, "test query")
 
+        mock_agent.invoke.assert_called_once_with(
+            {"messages": [("user", "test query")]},
+            config={"configurable": {"thread_id": "single-query"}}
+        )
         mock_print.assert_called_with("No response")
 
     @patch("builtins.print")
@@ -151,7 +139,6 @@ class TestRunSingleQuery:
 class TestMain:
     """Tests for main function."""
 
-    @patch("agent.DEEPAGENTS_AVAILABLE", True)
     @patch("agent.create_excel_agent")
     @patch("agent.run_interactive")
     @patch("sys.argv", ["agent.py"])
@@ -165,7 +152,6 @@ class TestMain:
 
         mock_run_interactive.assert_called_once_with(mock_agent_instance)
 
-    @patch("agent.DEEPAGENTS_AVAILABLE", True)
     @patch("agent.create_excel_agent")
     @patch("agent.run_single_query")
     @patch("sys.argv", ["agent.py", "test query"])
@@ -179,7 +165,6 @@ class TestMain:
 
         mock_run_single.assert_called_once_with(mock_agent_instance, "test query")
 
-    @patch("agent.DEEPAGENTS_AVAILABLE", True)
     @patch("agent.create_excel_agent")
     @patch("agent.run_single_query")
     @patch("sys.argv", ["agent.py", "--model", "anthropic:claude-3-opus", "query"])
@@ -195,7 +180,6 @@ class TestMain:
         call_kwargs = mock_create_agent.call_args[1]
         assert call_kwargs["model"] == "anthropic:claude-3-opus"
 
-    @patch("agent.DEEPAGENTS_AVAILABLE", True)
     @patch("agent.create_excel_agent")
     @patch("agent.run_single_query")
     @patch("sys.argv", ["agent.py", "--dir", "/custom/dir", "query"])

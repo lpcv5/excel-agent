@@ -5,6 +5,7 @@ This module provides the ExcelAppManager class which handles creating,
 managing, and cleaning up the Excel COM application instance.
 """
 
+import pythoncom
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -74,6 +75,12 @@ class ExcelAppManager:
         """
         if self._app is not None:
             return  # Already started
+
+        # Initialize COM for this thread (required for multi-threaded environments)
+        try:
+            pythoncom.CoInitialize()
+        except Exception:
+            pass  # Already initialized or not needed
 
         if self._attach_to_existing:
             try:
@@ -296,9 +303,14 @@ class ExcelAppManager:
         Returns:
             The actual path key if found, None otherwise
         """
-        filepath_lower = filepath.lower()
+        # Normalize the path to handle different separators (forward vs backslash)
+        try:
+            normalized = str(Path(filepath).resolve()).lower()
+        except Exception:
+            normalized = filepath.lower()
+
         for open_path in self._workbooks.keys():
-            if open_path.lower() == filepath_lower:
+            if open_path.lower() == normalized:
                 return open_path
         return None
 
@@ -448,6 +460,7 @@ class ExcelAppManager:
 
         Converts float to int if the float represents a whole number.
         This is because Excel stores all numbers as floats.
+        Also converts datetime objects to ISO format strings for JSON serialization.
 
         Args:
             value: Value from Excel COM
@@ -455,8 +468,23 @@ class ExcelAppManager:
         Returns:
             Normalized value
         """
+        import datetime
+
+        # Handle datetime objects (check by class name for pywintypes compatibility)
+        value_type = type(value).__name__
+        if isinstance(value, (datetime.datetime, datetime.date)):
+            return value.isoformat()
+        elif value_type in ('time', 'datetime', 'date') or hasattr(value, 'isoformat'):
+            # Handle pywintypes datetime or other datetime-like objects
+            try:
+                return value.isoformat()
+            except AttributeError:
+                return str(value)
+
+        # Convert float to int if whole number
         if isinstance(value, float) and value.is_integer():
             return int(value)
+
         return value
 
     def write_range(self, worksheet: object, range_address: str, data: list[list]) -> None:

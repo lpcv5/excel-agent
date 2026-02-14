@@ -6,6 +6,8 @@ via the Windows COM interface. Requires Microsoft Excel and Windows platform.
 """
 
 import json
+import threading
+from pathlib import Path
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -15,18 +17,58 @@ from excel_com import workbook_ops, formatting_ops, formula_ops
 
 
 # =============================================================================
-# Global Excel Manager (Singleton)
+# Thread-Local Excel Manager
 # =============================================================================
 
-_excel_manager: Optional[ExcelAppManager] = None
+# Use thread-local storage to ensure each thread has its own Excel manager
+# This is necessary because COM objects cannot be used across threads
+_thread_local = threading.local()
+
+# Global registry of opened workbook paths (shared across threads)
+# This allows different threads to know which workbooks should be open
+_opened_workbooks: set[str] = set()
+_workbook_lock = threading.Lock()
 
 
 def get_excel_manager() -> ExcelAppManager:
-    """Get or create the global Excel manager instance."""
-    global _excel_manager
-    if _excel_manager is None:
-        _excel_manager = ExcelAppManager(visible=False, display_alerts=False)
-    return _excel_manager
+    """Get or create the thread-local Excel manager instance.
+
+    Each thread gets its own Excel manager to avoid COM threading issues.
+    The manager will automatically re-open any workbooks that were opened
+    in other threads.
+    """
+    if not hasattr(_thread_local, 'manager'):
+        _thread_local.manager = ExcelAppManager(visible=False, display_alerts=False)
+
+    manager = _thread_local.manager
+
+    # Ensure workbooks registered in other threads are opened in this thread
+    if not manager.is_running():
+        manager.start()
+        # Re-open workbooks that were opened in other threads
+        with _workbook_lock:
+            for path in _opened_workbooks:
+                try:
+                    manager.open_workbook(path, read_only=False)
+                except Exception:
+                    pass  # Ignore errors during re-opening
+
+    return manager
+
+
+def normalize_filepath(filepath: str) -> str:
+    """Normalize a filepath to absolute path for consistent matching.
+
+    Args:
+        filepath: The filepath to normalize
+
+    Returns:
+        Normalized absolute path as string
+    """
+    try:
+        return str(Path(filepath).resolve())
+    except Exception:
+        return filepath
 
 
 # =============================================================================
@@ -81,12 +123,17 @@ def excel_open_workbook(filepath: str, read_only: bool = False) -> str:
         manager = get_excel_manager()
         manager.start()
 
-        workbook, worksheets = workbook_ops.open_workbook(manager, filepath, read_only)
+        normalized_path = normalize_filepath(filepath)
+        workbook, worksheets = workbook_ops.open_workbook(manager, normalized_path, read_only)
+
+        # Register the workbook path for cross-thread access
+        with _workbook_lock:
+            _opened_workbooks.add(normalized_path)
 
         result = {
             "success": True,
             "workbook_name": workbook.Name,
-            "workbook_path": filepath,
+            "workbook_path": normalized_path,
             "worksheets": worksheets,
             "read_only": read_only,
         }
@@ -113,12 +160,13 @@ def excel_list_worksheets(filepath: str) -> str:
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        normalized_path = normalize_filepath(filepath)
+        workbook = manager.get_workbook(normalized_path)
         worksheets = manager.list_worksheets(workbook)
 
         result = {
             "success": True,
-            "workbook_path": filepath,
+            "workbook_path": normalized_path,
             "worksheets": worksheets,
             "count": len(worksheets),
         }
@@ -151,7 +199,7 @@ def excel_read_range(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         data = workbook_ops.read_range(manager, workbook, worksheet_name, range_address)
 
         result = {
@@ -202,7 +250,7 @@ def excel_write_range(
         if not isinstance(parsed_data, list) or not all(isinstance(row, list) for row in parsed_data):
             return json.dumps({"error": "Data must be a 2D array (list of lists)"})
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         workbook_ops.write_range(manager, workbook, worksheet_name, range_address, parsed_data)
 
         result = {
@@ -239,7 +287,7 @@ def excel_save_workbook(filepath: str, save_as: Optional[str] = None) -> str:
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         manager.save_workbook(workbook, save_as)
 
         result = {
@@ -271,11 +319,16 @@ def excel_close_workbook(filepath: str, save: bool = True) -> str:
         manager = get_excel_manager()
         manager.start()
 
-        workbook_ops.close_workbook(manager, filepath, save)
+        normalized_path = normalize_filepath(filepath)
+        workbook_ops.close_workbook(manager, normalized_path, save)
+
+        # Remove from registry
+        with _workbook_lock:
+            _opened_workbooks.discard(normalized_path)
 
         result = {
             "success": True,
-            "workbook_path": filepath,
+            "workbook_path": normalized_path,
             "saved": save,
         }
 
@@ -311,7 +364,7 @@ def excel_add_worksheet(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         workbook_ops.add_worksheet(manager, workbook, worksheet_name, after)
 
         result = {
@@ -347,7 +400,7 @@ def excel_delete_worksheet(filepath: str, worksheet_name: str) -> str:
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         workbook_ops.delete_worksheet(manager, workbook, worksheet_name)
 
         result = {
@@ -384,7 +437,7 @@ def excel_rename_worksheet(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         workbook_ops.rename_worksheet(manager, workbook, old_name, new_name)
 
         result = {
@@ -422,7 +475,7 @@ def excel_copy_worksheet(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         new_sheet = workbook_ops.copy_worksheet(manager, workbook, worksheet_name, new_name)
 
         result = {
@@ -457,7 +510,7 @@ def excel_get_used_range(filepath: str, worksheet_name: str) -> str:
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         address, rows, cols = workbook_ops.get_used_range(manager, workbook, worksheet_name)
 
         result = {
@@ -513,7 +566,7 @@ def excel_set_font_format(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.set_font_format(
             manager, workbook, worksheet_name, range_address,
             font_name, size, bold, italic, underline, color
@@ -572,7 +625,7 @@ def excel_set_cell_format(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.set_cell_format(
             manager, workbook, worksheet_name, range_address,
             horizontal_alignment, vertical_alignment, wrap_text, number_format
@@ -629,7 +682,7 @@ def excel_set_border_format(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.set_border_format(
             manager, workbook, worksheet_name, range_address,
             edge, style, weight, color
@@ -678,7 +731,7 @@ def excel_set_background_color(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.set_background_color(
             manager, workbook, worksheet_name, range_address, color
         )
@@ -725,7 +778,7 @@ def excel_set_formula(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formula_ops.set_formula(
             manager, workbook, worksheet_name, range_address, formula
         )
@@ -766,7 +819,7 @@ def excel_get_formula(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formula = formula_ops.get_formula(
             manager, workbook, worksheet_name, range_address
         )
@@ -815,7 +868,7 @@ def excel_auto_fit_columns(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.auto_fit_columns(
             manager, workbook, worksheet_name, range_address
         )
@@ -857,7 +910,7 @@ def excel_set_column_width(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.set_column_width(
             manager, workbook, worksheet_name, columns, width
         )
@@ -900,7 +953,7 @@ def excel_set_row_height(
         manager = get_excel_manager()
         manager.start()
 
-        workbook = manager.get_workbook(filepath)
+        workbook = manager.get_workbook(normalize_filepath(filepath))
         formatting_ops.set_row_height(
             manager, workbook, worksheet_name, rows, height
         )

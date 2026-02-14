@@ -1,14 +1,6 @@
 ---
 name: data-analysis
 description: Analyze Excel data with statistical methods, identify patterns, and provide insights
-triggers:
-  - analyze
-  - statistics
-  - summary
-  - patterns
-  - insights
-  - 数据分析
-  - 统计
 ---
 
 # Data Analysis Skill
