@@ -5,11 +5,10 @@ description = "DeepAgents-based Excel processing agent for data analysis, formul
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "deepagents",
-    "langchain-anthropic>=0.3.0",
-    "langchain-openai>=0.2.0",
-    "langgraph>=0.2.0",
-    "pywin32>=306; sys_platform == 'win32'",
+    "deepagents>=0.4.0",
+    "langchain-openai>=1.1.9",
+    "langgraph>=1.0.8",
+    "pywin32>=311",
 ]
 
 [project.optional-dependencies]
