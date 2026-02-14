@@ -4,6 +4,8 @@ This module provides the command-line interface for Excel Agent,
 maintaining backward compatibility with the original agent.py.
 """
 
+import asyncio
+import sys
 from typing import Optional
 
 from excel_agent.config import AgentConfig
@@ -16,6 +18,7 @@ from excel_agent.events import (
     ThinkingEvent,
     ToolCallArgsEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
 )
 from ui.base import BaseUI
 
@@ -38,7 +41,7 @@ class CLIRunner(BaseUI):
         self._current_tool_name: Optional[str] = None
         self._current_tool_args: str = ""
 
-    def run(self) -> None:
+    async def run(self) -> None:
         """Run interactive CLI mode."""
         print("=" * 60)
         print("  Excel Agent - Interactive Mode")
@@ -58,7 +61,7 @@ class CLIRunner(BaseUI):
                     break
 
                 # Process streaming events
-                for event in self.core.stream_query(user_input):
+                async for event in self.core.astream_query(user_input):
                     self._render_event(event)
 
                 # Final newline after streaming completes
@@ -68,6 +71,9 @@ class CLIRunner(BaseUI):
                 self._reset_state()
 
             except KeyboardInterrupt:
+                print("\n\nGoodbye!")
+                break
+            except asyncio.CancelledError:
                 print("\n\nGoodbye!")
                 break
             except Exception as e:
@@ -92,6 +98,9 @@ class CLIRunner(BaseUI):
         Args:
             event: The event to render
         """
+        # Force flush stdout before each output to ensure real-time streaming
+        sys.stdout.flush()
+
         if isinstance(event, ThinkingEvent):
             if self._last_event_type != EventType.THINKING:
                 print("\n💭 Thinking:", end="", flush=True)
@@ -104,8 +113,15 @@ class CLIRunner(BaseUI):
                 print(f"   Args: {self._current_tool_args}", flush=True)
 
             self._current_tool_name = event.tool_name
-            self._current_tool_args = ""
+            # Show tool args if available (but not empty {} or empty string)
+            initial_args = event.tool_args or ""
+            # Skip if it's just empty braces
+            if initial_args in ("", "{}"):
+                self._current_tool_args = ""
+            else:
+                self._current_tool_args = initial_args
             print(f"\n🔧 Calling tool: {event.tool_name}", flush=True)
+            # Don't print empty args
             self._last_event_type = EventType.TOOL_CALL_START
 
         elif isinstance(event, ToolCallArgsEvent):
@@ -125,6 +141,16 @@ class CLIRunner(BaseUI):
 
         elif isinstance(event, RefusalEvent):
             print(f"\n⚠️ Refusal: {event.content}", flush=True)
+
+        elif isinstance(event, ToolResultEvent):
+            # Print any accumulated tool args before showing result
+            if self._current_tool_name and self._current_tool_args:
+                print(f"   Args: {self._current_tool_args}", flush=True)
+                self._current_tool_args = ""
+            # Show tool result
+            result_preview = event.content[:200] + "..." if len(event.content) > 200 else event.content
+            print(f"\n✅ Tool result: {result_preview}", flush=True)
+            self._last_event_type = EventType.TOOL_RESULT
 
         elif isinstance(event, ErrorEvent):
             print(f"\n⚠️ Error: {event.error_message}", flush=True)

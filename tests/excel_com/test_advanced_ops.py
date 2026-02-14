@@ -1,11 +1,11 @@
 """Tests for excel_com/advanced_ops.py."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from excel_com.manager import ExcelAppManager
-from excel_com import advanced_ops
+from libs.excel_com.manager import ExcelAppManager
+from libs.excel_com import advanced_ops
 
 
 class TestCreateChart:
@@ -48,7 +48,7 @@ class TestCreateChart:
         mock_worksheet.ChartObjects.return_value = mock_chart_objects
         manager.get_worksheet.return_value = mock_worksheet
 
-        result = advanced_ops.create_chart(
+        advanced_ops.create_chart(
             manager, mock_workbook, "Sheet1", "A1:D10",
             chart_type=51,  # Pie chart
             chart_title="Test Chart",
@@ -156,7 +156,7 @@ class TestCreatePivotTable:
         mock_pivot_caches.Create.return_value = mock_pivot_cache
         mock_workbook.PivotCaches.return_value = mock_pivot_caches
 
-        result = advanced_ops.create_pivot_table(
+        advanced_ops.create_pivot_table(
             manager, mock_workbook,
             source_sheet="Data", source_range="A1:D100",
             dest_sheet="NewPivot", dest_cell="A1",
@@ -383,7 +383,7 @@ class TestFindReplace:
         mock_worksheet.Range.return_value = mock_range
         manager.get_worksheet.return_value = mock_worksheet
 
-        result = advanced_ops.find_replace(
+        advanced_ops.find_replace(
             manager, mock_workbook, "Sheet1", "A1:A3",
             find_text="Hello",
             replace_with="Hi",
@@ -413,7 +413,7 @@ class TestFindReplace:
         mock_worksheet.Range.return_value = mock_range
         manager.get_worksheet.return_value = mock_worksheet
 
-        result = advanced_ops.find_replace(
+        advanced_ops.find_replace(
             manager, mock_workbook, "Sheet1", "A1:A2",
             find_text="hello",
             replace_with="Hi",
@@ -441,7 +441,7 @@ class TestFindReplace:
         mock_worksheet.Range.return_value = mock_range
         manager.get_worksheet.return_value = mock_worksheet
 
-        result = advanced_ops.find_replace(
+        advanced_ops.find_replace(
             manager, mock_workbook, "Sheet1", "A1:A2",
             find_text="Hello",
             replace_with="Hi",

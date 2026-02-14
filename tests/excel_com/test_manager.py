@@ -1,11 +1,10 @@
 """Tests for excel_com/manager.py."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
-from excel_com.manager import ExcelAppManager
+from libs.excel_com.manager import ExcelAppManager
 
 
 class TestExcelAppManagerInit:

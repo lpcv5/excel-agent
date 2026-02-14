@@ -1,7 +1,7 @@
 """Tests for ui/cli/runner.py."""
 
+import asyncio
 from unittest.mock import MagicMock, patch
-import pytest
 
 
 class TestCLIRunner:
@@ -14,7 +14,7 @@ class TestCLIRunner:
         from ui.cli.runner import CLIRunner
 
         runner = CLIRunner()
-        runner.run()
+        asyncio.run(runner.run())
 
         # Should print goodbye message
         assert any("Goodbye" in str(call) for call in mock_print.call_args_list)
@@ -26,7 +26,7 @@ class TestCLIRunner:
         from ui.cli.runner import CLIRunner
 
         runner = CLIRunner()
-        runner.run()
+        asyncio.run(runner.run())
 
         assert any("Goodbye" in str(call) for call in mock_print.call_args_list)
 
@@ -37,7 +37,7 @@ class TestCLIRunner:
         from ui.cli.runner import CLIRunner
 
         runner = CLIRunner()
-        runner.run()
+        asyncio.run(runner.run())
 
         assert any("Goodbye" in str(call) for call in mock_print.call_args_list)
 
@@ -50,26 +50,26 @@ class TestCLIRunner:
         runner = CLIRunner()
         # Mock the core to prevent actual agent creation
         runner.core = MagicMock()
-        runner.run()
+        asyncio.run(runner.run())
 
-        # Empty input should be skipped, stream_query should not be called
-        runner.core.stream_query.assert_not_called()
+        # Empty input should be skipped, astream_query should not be called
+        runner.core.astream_query.assert_not_called()
 
     @patch("builtins.input", side_effect=["hello", "quit"])
     @patch("builtins.print")
     def test_run_processes_query(self, mock_print, mock_input):
-        """Test CLIRunner processes queries using stream_query."""
+        """Test CLIRunner processes queries using astream_query."""
         from ui.cli.runner import CLIRunner
 
         runner = CLIRunner()
         runner.core = MagicMock()
-        # stream_query() returns an iterator of events
-        runner.core.stream_query.return_value = iter([])
+        # astream_query() returns an async iterator of events
+        runner.core.astream_query = MagicMock(return_value=iter([]))
 
-        runner.run()
+        asyncio.run(runner.run())
 
-        # Verify stream_query was called
-        runner.core.stream_query.assert_called_once_with("hello")
+        # Verify astream_query was called
+        runner.core.astream_query.assert_called_once_with("hello")
 
     @patch("builtins.input", side_effect=KeyboardInterrupt())
     @patch("builtins.print")
@@ -78,7 +78,7 @@ class TestCLIRunner:
         from ui.cli.runner import CLIRunner
 
         runner = CLIRunner()
-        runner.run()
+        asyncio.run(runner.run())
 
         # Should exit gracefully
         assert any("Goodbye" in str(call) for call in mock_print.call_args_list)
@@ -91,10 +91,10 @@ class TestCLIRunner:
 
         runner = CLIRunner()
         runner.core = MagicMock()
-        # Make stream_query raise an exception
-        runner.core.stream_query.side_effect = Exception("Test error")
+        # Make astream_query raise an exception
+        runner.core.astream_query.side_effect = Exception("Test error")
 
-        runner.run()
+        asyncio.run(runner.run())
 
         # Should print error message
         assert any("Error" in str(call) for call in mock_print.call_args_list)

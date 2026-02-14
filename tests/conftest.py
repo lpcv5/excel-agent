@@ -199,11 +199,11 @@ def mock_range(mock_excel_factory):
 @pytest.fixture
 def mock_manager(mock_excel_app):
     """Create a mock ExcelAppManager instance with shared COM object."""
-    with patch("excel_com.manager.win32com.client") as mock_win32com:
+    with patch("libs.excel_com.manager.win32com.client") as mock_win32com:
         mock_win32com.client.Dispatch.return_value = mock_excel_app
         mock_win32com.client.DispatchEx.return_value = mock_excel_app
 
-        from excel_com.manager import ExcelAppManager
+        from libs.excel_com.manager import ExcelAppManager
         manager = ExcelAppManager(visible=False, display_alerts=False)
         manager._app = mock_excel_app
         yield manager

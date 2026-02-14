@@ -27,7 +27,7 @@ Conditional Formatting:
 This module is structured for easy extension as new features are added.
 """
 
-from typing import Optional, Any
+from typing import Optional
 from .manager import ExcelAppManager
 
 

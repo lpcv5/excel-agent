@@ -1,6 +1,5 @@
 """Tests for excel_agent/config.py."""
 
-import pytest
 from pathlib import Path
 
 
@@ -13,7 +12,7 @@ class TestAgentConfig:
 
         config = AgentConfig()
 
-        assert config.model == "openai:gpt-4.1"
+        assert config.model == "openai:gpt-5-mini"
         assert config.excel_visible is False
         assert config.streaming_enabled is True
 

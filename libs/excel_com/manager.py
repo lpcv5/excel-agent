@@ -13,7 +13,6 @@ import win32com.client
 
 if TYPE_CHECKING:
     from win32com.client import Application  # type: ignore
-    from win32com.client import Workbook  # type: ignore
 
 
 class ExcelAppManager:
@@ -224,7 +223,26 @@ class ExcelAppManager:
             self._workbook_owned[str_path] = True  # We own it, can close it
             return workbook
         except Exception as e:
-            raise Exception(f"Failed to open workbook '{filepath}': {e}") from e
+            # Try alternative path formats for Chinese/multibyte filenames
+            # Some Windows configurations need different encoding approaches
+            import os
+
+            try:
+                # Try using the path as-is but ensure it's a string
+                workbook = self._app.Workbooks.Open(str(str_path), ReadOnly=read_only)
+                self._workbooks[str_path] = workbook
+                self._workbook_owned[str_path] = True
+                return workbook
+            except Exception:
+                # Try with os.path for absolute path normalization
+                abs_path = os.path.abspath(str_path)
+                workbook = self._app.Workbooks.Open(abs_path, ReadOnly=read_only)
+                self._workbooks[str_path] = workbook
+                self._workbook_owned[str_path] = True
+                return workbook
+            except Exception:
+                # All attempts failed, raise original error with details
+                raise Exception(f"Failed to open workbook '{filepath}' (tried: '{str_path}', '{os.path.abspath(str_path)}'): {e}") from e
 
     def close_workbook(self, filepath: str, save: bool = True) -> None:
         """Close an open workbook.
@@ -340,6 +358,45 @@ class ExcelAppManager:
             pass
 
         return None
+
+    def create_workbook(self, filepath: Optional[str] = None) -> object:
+        """Create a new Excel workbook.
+
+        Creates a new blank workbook. If a filepath is provided, the workbook
+        will be saved to that location.
+
+        Args:
+            filepath: Optional path to save the workbook to
+
+        Returns:
+            The Workbook COM object
+
+        Raises:
+            RuntimeError: If Excel application is not initialized
+            Exception: For other COM-related errors
+        """
+        if self._app is None:
+            raise RuntimeError("Excel application is not initialized. Call start() first.")
+
+        try:
+            # Create a new blank workbook
+            workbook = self._app.Workbooks.Add()
+
+            # If filepath provided, save the workbook
+            if filepath:
+                save_path = str(Path(filepath).resolve())
+                workbook.SaveAs(save_path)
+                self._workbooks[save_path] = workbook
+                self._workbook_owned[save_path] = True
+            else:
+                # Track by name for unsaved workbooks
+                workbook_name = workbook.Name
+                self._workbooks[workbook_name] = workbook
+                self._workbook_owned[workbook_name] = True
+
+            return workbook
+        except Exception as e:
+            raise Exception(f"Failed to create workbook: {e}") from e
 
     def get_active_workbook(self) -> Optional[object]:
         """Get the currently active workbook.

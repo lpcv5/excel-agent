@@ -1,8 +1,10 @@
 """
-Excel processing tools for DeepAgents using Windows COM interface.
+Excel tools for DeepAgents using Windows COM interface.
 
 This module provides tools for reading, writing, and manipulating Excel files
 via the Windows COM interface. Requires Microsoft Excel and Windows platform.
+
+Low-level COM operations are in libs.excel_com package.
 """
 
 import json
@@ -12,8 +14,8 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-from excel_com.manager import ExcelAppManager
-from excel_com import workbook_ops, formatting_ops, formula_ops
+from libs.excel_com.manager import ExcelAppManager
+from libs.excel_com import workbook_ops, formatting_ops, formula_ops
 
 
 # =============================================================================
@@ -102,7 +104,7 @@ def excel_status() -> str:
 
 
 # =============================================================================
-# Workbook Tools (6)
+# Workbook Tools (7)
 # =============================================================================
 
 @tool
@@ -140,8 +142,55 @@ def excel_open_workbook(filepath: str, read_only: bool = False) -> str:
 
         return json.dumps(result, indent=2, ensure_ascii=False)
 
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         return json.dumps({"error": f"File not found: {filepath}"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@tool
+def excel_create_workbook(filepath: str, sheet_names: Optional[str] = None) -> str:
+    """Create a new Excel workbook.
+
+    Creates a new blank workbook and optionally saves it to the specified path.
+    The workbook will be opened automatically after creation.
+
+    Args:
+        filepath: Path where the workbook will be saved (.xlsx)
+        sheet_names: Optional JSON string array of sheet names (e.g., '["Sheet1", "Sheet2"]')
+
+    Returns:
+        JSON string with workbook information.
+    """
+    try:
+        manager = get_excel_manager()
+        manager.start()
+
+        normalized_path = normalize_filepath(filepath)
+
+        # Parse sheet names if provided
+        sheet_names_list = None
+        if sheet_names:
+            try:
+                sheet_names_list = json.loads(sheet_names)
+            except json.JSONDecodeError:
+                return json.dumps({"error": "sheet_names must be a valid JSON array"})
+
+        workbook, worksheets = workbook_ops.create_workbook(manager, normalized_path, sheet_names_list)
+
+        # Register the workbook path for cross-thread access
+        with _workbook_lock:
+            _opened_workbooks.add(normalized_path)
+
+        result = {
+            "success": True,
+            "workbook_name": workbook.Name,
+            "workbook_path": normalized_path,
+            "worksheets": worksheets,
+        }
+
+        return json.dumps(result, indent=2, ensure_ascii=False)
+
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -173,7 +222,7 @@ def excel_list_worksheets(filepath: str) -> str:
 
         return json.dumps(result, indent=2, ensure_ascii=False)
 
-    except ValueError as e:
+    except ValueError:
         return json.dumps({"error": f"Workbook not open: {filepath}. Open it first with excel_open_workbook."})
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -983,11 +1032,13 @@ EXCEL_TOOLS = [
     excel_status,
     # Workbook
     excel_open_workbook,
+    excel_create_workbook,
     excel_list_worksheets,
-    excel_read_range,
-    excel_write_range,
     excel_save_workbook,
     excel_close_workbook,
+    # Range
+    excel_read_range,
+    excel_write_range,
     # Worksheet
     excel_add_worksheet,
     excel_delete_worksheet,

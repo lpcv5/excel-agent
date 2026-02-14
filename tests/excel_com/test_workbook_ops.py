@@ -2,10 +2,9 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from excel_com.manager import ExcelAppManager
-from excel_com import workbook_ops
+from libs.excel_com.manager import ExcelAppManager
+from libs.excel_com import workbook_ops
 
 
 class TestOpenWorkbook:
@@ -276,7 +275,7 @@ class TestWriteRange:
 
         sample_data = [[1, 2], [3, 4]]
 
-        with patch("excel_com.workbook_ops.preserve_user_state", return_value=mock_preserve):
+        with patch("libs.excel_com.workbook_ops.preserve_user_state", return_value=mock_preserve):
             workbook_ops.write_range(
                 manager, mock_workbook, "Sheet1", "A1", sample_data
             )
@@ -295,7 +294,7 @@ class TestWriteRange:
 
         sample_data = [[1, 2]]
 
-        with patch("excel_com.workbook_ops.preserve_user_state") as mock_preserve_ctx:
+        with patch("libs.excel_com.workbook_ops.preserve_user_state") as mock_preserve_ctx:
             mock_preserve_ctx.return_value.__enter__ = MagicMock(return_value=None)
             mock_preserve_ctx.return_value.__exit__ = MagicMock(return_value=None)
 

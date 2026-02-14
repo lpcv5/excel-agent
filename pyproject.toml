@@ -8,6 +8,7 @@ dependencies = [
     "deepagents",
     "langchain-openai>=1.1.9",
     "langgraph>=1.0.8",
+    "stream-msg-parser",
     "pywin32>=311",
 ]
 
@@ -26,7 +27,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["excel_com*", "excel_agent*", "ui*", "skills*"]
+include = ["excel_com*", "excel_agent*", "ui*", "skills*", "tools*", "libs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -34,6 +35,10 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests as integration tests (require real LLM/API calls)",
+]
 
 [tool.uv.sources]
 deepagents = { path = "libs/deepagents/libs/deepagents", editable = true }
+stream-msg-parser = { path = "libs/stream-msg-parser", editable = true }

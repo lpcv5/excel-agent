@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for excel_com module tests.
+Shared pytest fixtures for libs.excel_com module tests.
 
 This module extends the parent conftest.py with excel_com-specific fixtures.
 All tests share the mock COM objects from the parent conftest.py.
@@ -17,7 +17,7 @@ import pytest
 @pytest.fixture
 def mock_win32com(mock_excel_app):
     """Mock the win32com.client module with shared Excel app."""
-    with patch("excel_com.manager.win32com.client") as mock_client:
+    with patch("libs.excel_com.manager.win32com.client") as mock_client:
         mock_client.Dispatch.return_value = mock_excel_app
         mock_client.DispatchEx.return_value = mock_excel_app
         yield mock_client
