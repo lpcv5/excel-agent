@@ -49,7 +49,8 @@ def create_excel_agent(
         skills_paths.append(str(skills_path))
 
     # Create the filesystem backend for file operations
-    backend = FilesystemBackend(root_dir=work_dir)
+    # Enable virtual_mode so that "/" refers to work_dir, not the drive root
+    backend = FilesystemBackend(root_dir=work_dir, virtual_mode=True)
 
     # Create checkpointer for conversation state persistence
     checkpointer = MemorySaver()
