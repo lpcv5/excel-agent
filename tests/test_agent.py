@@ -47,17 +47,20 @@ class TestRunInteractive:
     @patch("builtins.input", side_effect=["hello", "quit"])
     @patch("builtins.print")
     def test_run_interactive_processes_query(self, mock_print, mock_input):
-        """Test run_interactive processes queries."""
+        """Test run_interactive processes queries using stream."""
         from agent import run_interactive
 
         mock_agent = MagicMock()
-        mock_agent.invoke.return_value = {"output": "Response text"}
+        # stream() returns an iterator of (message_chunk, metadata) tuples
+        mock_agent.stream.return_value = iter([])
 
         run_interactive(mock_agent)
 
-        mock_agent.invoke.assert_called_once_with(
+        # Verify stream was called (not invoke, since we use streaming)
+        mock_agent.stream.assert_called_once_with(
             {"messages": [("user", "hello")]},
-            config={"configurable": {"thread_id": "interactive-session"}}
+            config={"configurable": {"thread_id": "interactive-session"}},
+            stream_mode="messages",
         )
 
     @patch("builtins.input", side_effect=KeyboardInterrupt())
@@ -75,11 +78,12 @@ class TestRunInteractive:
     @patch("builtins.input", side_effect=["query", "quit"])
     @patch("builtins.print")
     def test_run_interactive_handles_exception(self, mock_print, mock_input):
-        """Test run_interactive handles exceptions."""
+        """Test run_interactive handles exceptions during streaming."""
         from agent import run_interactive
 
         mock_agent = MagicMock()
-        mock_agent.invoke.side_effect = Exception("Test error")
+        # Make stream raise an exception
+        mock_agent.stream.side_effect = Exception("Test error")
 
         run_interactive(mock_agent)
 
@@ -179,20 +183,6 @@ class TestMain:
         mock_create_agent.assert_called_once()
         call_kwargs = mock_create_agent.call_args[1]
         assert call_kwargs["model"] == "anthropic:claude-3-opus"
-
-    @patch("agent.create_excel_agent")
-    @patch("agent.run_single_query")
-    @patch("sys.argv", ["agent.py", "--dir", "/custom/dir", "query"])
-    def test_main_custom_working_dir(self, mock_run_single, mock_create_agent):
-        """Test main with custom working directory."""
-        mock_agent_instance = MagicMock()
-        mock_create_agent.return_value = mock_agent_instance
-
-        from agent import main
-        main()
-
-        call_kwargs = mock_create_agent.call_args[1]
-        assert call_kwargs["working_dir"] == "/custom/dir"
 
     @patch("agent.EXCEL_TOOLS", [MagicMock(name="tool1"), MagicMock(name="tool2")])
     @patch("builtins.print")

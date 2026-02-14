@@ -10,10 +10,11 @@ class TestGetExcelManager:
     """Tests for get_excel_manager function."""
 
     def test_get_excel_manager_singleton(self):
-        """Test get_excel_manager returns singleton instance."""
-        # Clear the global instance first
+        """Test get_excel_manager returns singleton instance (thread-local)."""
+        # Clear the thread-local manager first
         import excel_tools
-        excel_tools._excel_manager = None
+        if hasattr(excel_tools._thread_local, 'manager'):
+            delattr(excel_tools._thread_local, 'manager')
 
         from excel_tools import get_excel_manager
 
@@ -25,14 +26,16 @@ class TestGetExcelManager:
     def test_get_excel_manager_creates_new_instance(self):
         """Test get_excel_manager creates new instance when None."""
         import excel_tools
-        excel_tools._excel_manager = None
+        # Clear the thread-local manager first
+        if hasattr(excel_tools._thread_local, 'manager'):
+            delattr(excel_tools._thread_local, 'manager')
 
         from excel_tools import get_excel_manager
 
         manager = get_excel_manager()
 
         assert manager is not None
-        assert excel_tools._excel_manager is manager
+        assert excel_tools._thread_local.manager is manager
 
 
 class TestExcelStatus:
