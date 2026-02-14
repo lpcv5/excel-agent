@@ -14,14 +14,23 @@ Excel Agent is a DeepAgents-based intelligent Excel processing agent that uses W
 # Install dependencies
 uv sync
 
-# Run in interactive mode
+# Run in interactive CLI mode (default)
 uv run python agent.py
 
 # Run single query
 uv run python agent.py "Read sales.xlsx and show the first 10 rows"
 
+# Run with Web UI
+uv run python agent.py --web
+
 # List available tools
 uv run python agent.py --list-tools
+
+# Run with specific model
+uv run python agent.py --model openai:gpt-4 "Analyze data.xlsx"
+
+# Run with LLM call logging (for debugging)
+uv run python agent.py --log-level DEBUG "Read data.xlsx"
 
 # Run tests
 uv run pytest
@@ -35,40 +44,52 @@ uv run pytest --cov
 
 ## Architecture
 
-The codebase has three layers:
+The codebase has four layers:
 
 ```
-agent.py              # CLI entry point, creates DeepAgent
-excel_tools.py        # LangChain @tool wrappers, returns JSON strings
-excel_com/            # COM interface layer for Excel operations
-├── manager.py        # ExcelAppManager - COM lifecycle, workbook tracking
-├── workbook_ops.py   # Open/close/read/write workbooks
-├── formatting_ops.py # Font, cell, border, background formatting
-├── formula_ops.py    # Get/set formulas
-├── constants.py      # Excel enum mappings (e.g., xlCenter)
-├── context.py        # Context managers for preserving Excel state
-└── exceptions.py     # Custom exceptions
+agent.py               # CLI entry point with UI mode selection
+excel_agent/           # UI-agnostic agent core
+├── core.py            # AgentCore - agent creation, streaming, events
+├── config.py          # AgentConfig dataclass with logging settings
+├── events.py          # Event types for UI consumption
+├── session.py         # Session management
+└── callbacks/         # LangChain callbacks
+tools/
+└── excel_tool.py      # LangChain @tool wrappers, returns JSON strings
+ui/                    # UI implementations
+├── cli/runner.py      # CLI interface (default)
+└── web/server.py      # Web UI interface (--web flag)
+libs/
+├── excel_com/         # COM interface layer for Excel operations
+│   ├── manager.py     # ExcelAppManager - COM lifecycle, workbook tracking
+│   ├── workbook_ops.py
+│   ├── formatting_ops.py
+│   ├── formula_ops.py
+│   ├── advanced_ops.py
+│   ├── constants.py   # Excel enum mappings (e.g., xlCenter)
+│   ├── context.py     # Context managers for preserving Excel state
+│   └── exceptions.py
+├── stream_msg_parser/ # Streaming message parser for LangGraph
+│   ├── parser.py
+│   └── events.py
+└── deepagents/        # DeepAgents framework (submodule)
 ```
 
-**Data Flow**: Natural language query → DeepAgent → excel_tools.py → excel_com/ → Windows COM → Excel
+**Data Flow**: Natural language query → UI (CLI/Web) → AgentCore → DeepAgent → excel_tool.py → libs/excel_com/ → Windows COM → Excel
 
-### Agent Configuration
+### AgentCore Pattern
 
-The agent is configured in `create_excel_agent()` using `create_deep_agent()` from the DeepAgents harness:
-
-- `model`: LLM provider (default: `openai:gpt-5-mini`)
-- `tools`: EXCEL_TOOLS list from excel_tools.py
-- `memory`: AGENTS.md file defining agent identity and safety rules
-- `skills`: skills/ directory for specialized workflows
-- `backend`: FilesystemBackend for file operations
-- `checkpointer`: MemorySaver for conversation persistence
+The `AgentCore` class in `excel_agent/core.py` is the UI-agnostic interface:
+- `astream_query()`: Async streaming with event-based output
+- `invoke()`: Single query, returns string
+- Emits events: `TextEvent`, `ToolCallStartEvent`, `ToolResultEvent`, `ErrorEvent`, etc.
 
 ### COM Layer Patterns
 
 The excel_com layer uses thread-local storage for COM objects (COM cannot cross threads):
 
 ```python
-# Thread-local manager pattern (from excel_tools.py)
+# Thread-local manager pattern (from tools/excel_tool.py)
 _thread_local = threading.local()
 
 def get_excel_manager() -> ExcelAppManager:
@@ -102,6 +123,7 @@ Tests use a shared mock COM factory (tests/conftest.py) with pytest fixtures. Al
 
 - Python 3.12+
 - deepagents (local: libs/deepagents/libs/deepagents)
+- stream_msg_parser (local: libs/stream_msg_parser)
 - pywin32 (Windows COM interface)
 - langgraph (state graph, checkpointing)
 - langchain-openai (LLM provider)

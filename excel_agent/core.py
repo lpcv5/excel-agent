@@ -12,8 +12,8 @@ from collections.abc import AsyncGenerator
 from typing import Any, Optional
 
 from langgraph.graph.state import CompiledStateGraph
-from stream_msg_parser import MessageParser
-from stream_msg_parser.events import (
+from libs.stream_msg_parser import MessageParser
+from libs.stream_msg_parser.events import (
     ContentEvent as ParserContentEvent,
     ErrorEvent as ParserErrorEvent,
     ToolCallArgsEvent as ParserToolCallArgsEvent,
