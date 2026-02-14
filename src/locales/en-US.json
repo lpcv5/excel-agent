@@ -1,0 +1,90 @@
+{
+  "titleBar": {
+    "menu": {
+      "file": "File", "edit": "Edit", "view": "View", "tools": "Tools", "help": "Help",
+      "noItems": "No items"
+    }
+  },
+  "leftSidebar": {
+    "header": "Explorer",
+    "dataSources": "Data Sources", "noDataSources": "No data sources", "addDataSource": "Add Data Source",
+    "updateMemory": "Update Memory", "updateMemoryTooltip": "Data sources changed — click to re-analyze",
+    "projectFiles": "Project Files"
+  },
+  "rightSidebar": {
+    "header": "Conversations", "searchPlaceholder": "Search conversations...", "noConversations": "No conversations yet",
+    "messageCount": "{{count}} messages",
+    "statusActive": "Active", "statusDone": "Done",
+    "justNow": "Just now", "minutesAgo": "{{count}}m ago", "hoursAgo": "{{count}}h ago"
+  },
+  "mainContent": {
+    "welcomeTitle": "Welcome to ExcelAgent",
+    "welcomeSubtitle": "I can help you analyze Excel data, write formulas, generate charts, clean data, and more.",
+    "suggestions": ["Analyze this sales data", "Write a VLOOKUP formula", "Remove duplicate data", "Generate a pivot table"],
+    "placeholder": "Type a message, or press / for commands...",
+    "placeholderStreaming": "AI is responding...",
+    "shortcut": "Shortcuts", "attachment": "Attach", "reference": "Reference"
+  },
+  "footer": { "generating": "Generating...", "connected": "Connected", "analyzingDataSources": "Analyzing data sources..." },
+  "chat": {
+    "thinkingInProgress": "Thinking…", "thinkingDone": "Thought process",
+    "toolCallsHeader": "Tool Calls",
+    "toolRunning": "Running…", "toolCompleted": "{{done}}/{{total}} done",
+    "toolStatusRunning": "Running…", "toolStatusDone": "— Done", "toolStatusWaiting": "— Waiting",
+    "taskPlanHeader": "Task Plan", "taskRunning": "Running",
+    "processing": "Processing", "copy": "Copy", "regenerate": "Regenerate",
+    "tabParams": "Input Params", "tabResult": "Return Value",
+    "fieldName": "Tool Name", "fieldStatus": "Status", "fieldDuration": "Duration",
+    "waitingResult": "Waiting for result…", "close": "Close",
+    "copyJson": "Copy JSON", "copied": "Copied"
+  },
+  "settings": {
+    "title": "Settings", "loading": "Loading...",
+    "nav": { "models": "Models", "usage": "Usage", "language": "Language", "about": "About" },
+    "models": {
+      "title": "Model Management",
+      "addModel": "Add Model",
+      "empty": "No models configured. Add one to get started.",
+      "provider": "Provider",
+      "modelName": "Model Name",
+      "apiKey": "API Key",
+      "apiKeyHint": "Leave blank to use environment variable",
+      "baseUrl": "Base URL",
+      "baseUrlDesc": "Custom API endpoint (optional)",
+      "customProvider": "Custom",
+      "displayName": "Display Name (optional)",
+      "deleteBtn": "Delete"
+    },
+    "usage": {
+      "title": "Model Usage",
+      "mainModel": "Main Model",
+      "mainModelDesc": "Used for chat conversations",
+      "subagentsModel": "Subagents Model",
+      "subagentsModelDesc": "Used for subagent tasks (defaults to main model)",
+      "analysisModel": "Analysis Model",
+      "analysisModelDesc": "Used for background data analysis (defaults to main model)",
+      "notSelected": "Not selected"
+    },
+    "language": "Interface Language", "languageDesc": "Switch the application display language",
+    "about": { "title": "About", "appName": "Excel Agent" },
+    "save": "Save", "saved": "Saved",
+    "providerLabels": { "zhipu": "ZhipuAI", "openai": "OpenAI", "deepseek": "DeepSeek", "moonshot": "Moonshot" }
+  },
+  "welcome": {
+    "title": "Excel Agent", "subtitle": "Open a project to get started",
+    "newProject": "New Project", "openProject": "Open Project", "recentProjects": "Recent Projects"
+  },
+  "createProject": {
+    "back": "Back", "title": "New Project",
+    "folderSection": "Project Folder", "folderPlaceholder": "Select a folder...",
+    "projectName": "Project Name", "projectNamePlaceholder": "My Project",
+    "browse": "Browse...",
+    "dataSourcesSection": "Data Sources", "addSource": "Add Source",
+    "sourceFiles": "Files", "sourceFolder": "Folder",
+    "sourceHint": "Select files or a folder as data source",
+    "optionsSection": "Options",
+    "dataCleaning": "Enable data cleaning", "autoSave": "Auto-save memory", "showHidden": "Show hidden files",
+    "create": "Create Project", "creating": "Creating..."
+  },
+  "conversation": { "defaultTitle": "New Conversation" }
+}

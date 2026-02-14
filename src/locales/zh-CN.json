@@ -1,0 +1,90 @@
+{
+  "titleBar": {
+    "menu": {
+      "file": "文件", "edit": "编辑", "view": "视图", "tools": "工具", "help": "帮助",
+      "noItems": "暂无菜单项"
+    }
+  },
+  "leftSidebar": {
+    "header": "资源管理器",
+    "dataSources": "数据源", "noDataSources": "暂无数据源", "addDataSource": "添加数据源",
+    "updateMemory": "更新记忆", "updateMemoryTooltip": "数据源已变更，点击重新分析",
+    "projectFiles": "项目文件"
+  },
+  "rightSidebar": {
+    "header": "会话管理", "searchPlaceholder": "搜索会话...", "noConversations": "暂无会话记录",
+    "messageCount": "{{count}} 条",
+    "statusActive": "进行中", "statusDone": "完成",
+    "justNow": "刚刚", "minutesAgo": "{{count}} 分钟前", "hoursAgo": "{{count}} 小时前"
+  },
+  "mainContent": {
+    "welcomeTitle": "欢迎使用 ExcelAgent",
+    "welcomeSubtitle": "我可以帮你分析 Excel 数据、编写公式、生成图表、清洗数据等。",
+    "suggestions": ["帮我分析这份销售数据", "写一个 VLOOKUP 公式", "清洗重复数据", "生成数据透视表"],
+    "placeholder": "输入消息，或按 / 调出命令...",
+    "placeholderStreaming": "AI 正在回复...",
+    "shortcut": "快捷", "attachment": "附件", "reference": "引用"
+  },
+  "footer": { "generating": "生成中...", "connected": "已连接", "analyzingDataSources": "正在分析数据源..." },
+  "chat": {
+    "thinkingInProgress": "思考中…", "thinkingDone": "思考过程",
+    "toolCallsHeader": "工具调用",
+    "toolRunning": "运行中…", "toolCompleted": "{{done}}/{{total}} 完成",
+    "toolStatusRunning": "运行中…", "toolStatusDone": "— 完成", "toolStatusWaiting": "— 等待",
+    "taskPlanHeader": "任务规划", "taskRunning": "运行中",
+    "processing": "处理中", "copy": "复制", "regenerate": "重新生成",
+    "tabParams": "输入参数", "tabResult": "返回值",
+    "fieldName": "工具名称", "fieldStatus": "状态", "fieldDuration": "耗时",
+    "waitingResult": "等待返回…", "close": "关闭",
+    "copyJson": "复制 JSON", "copied": "已复制"
+  },
+  "settings": {
+    "title": "设置", "loading": "加载中...",
+    "nav": { "models": "模型", "usage": "用途", "language": "语言", "about": "关于" },
+    "models": {
+      "title": "模型管理",
+      "addModel": "添加模型",
+      "empty": "暂无模型配置，请添加一个。",
+      "provider": "服务商",
+      "modelName": "模型名称",
+      "apiKey": "API Key",
+      "apiKeyHint": "留空则使用环境变量",
+      "baseUrl": "Base URL",
+      "baseUrlDesc": "自定义 API 地址（可选）",
+      "customProvider": "自定义",
+      "displayName": "显示名称（可选）",
+      "deleteBtn": "删除"
+    },
+    "usage": {
+      "title": "模型用途",
+      "mainModel": "主模型",
+      "mainModelDesc": "用于聊天对话",
+      "subagentsModel": "子代理模型",
+      "subagentsModelDesc": "用于子代理任务（默认使用主模型）",
+      "analysisModel": "分析模型",
+      "analysisModelDesc": "用于后台数据分析（默认使用主模型）",
+      "notSelected": "未选择"
+    },
+    "language": "界面语言", "languageDesc": "切换应用显示语言",
+    "about": { "title": "关于", "appName": "Excel Agent" },
+    "save": "保存", "saved": "已保存",
+    "providerLabels": { "zhipu": "智谱 (ZhipuAI)", "openai": "OpenAI", "deepseek": "DeepSeek", "moonshot": "Moonshot" }
+  },
+  "welcome": {
+    "title": "Excel Agent", "subtitle": "打开项目以开始使用",
+    "newProject": "新建项目", "openProject": "打开项目", "recentProjects": "最近项目"
+  },
+  "createProject": {
+    "back": "返回", "title": "新建项目",
+    "folderSection": "项目文件夹", "folderPlaceholder": "选择文件夹...",
+    "projectName": "项目名称", "projectNamePlaceholder": "我的项目",
+    "browse": "浏览...",
+    "dataSourcesSection": "数据源", "addSource": "添加数据源",
+    "sourceFiles": "文件", "sourceFolder": "文件夹",
+    "sourceHint": "选择文件或文件夹作为数据源",
+    "optionsSection": "选项",
+    "dataCleaning": "启用数据清洗", "autoSave": "自动保存记忆", "showHidden": "显示隐藏文件",
+    "create": "创建项目", "creating": "创建中..."
+  },
+  "conversation": { "defaultTitle": "新对话" }
+}

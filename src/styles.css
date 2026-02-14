@@ -1,0 +1,229 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+
+  --font-size-2xs:              10px;
+  --font-size-2xs--line-height: 1.4;
+  --font-size-xs-minus:              11px;
+  --font-size-xs-minus--line-height: 1.5;
+  --font-size-xs-plus:              11.5px;
+  --font-size-xs-plus--line-height: 1.5;
+  --font-size-sm-minus:              12.5px;
+  --font-size-sm-minus--line-height: 1.6;
+  --font-size-body:              13px;
+  --font-size-body--line-height: 1.65;
+
+  --spacing-4_5:         18px;
+  --spacing-13:          52px;
+  --spacing-15:          60px;
+  --spacing-18:          72px;
+  --spacing-sidebar-col: clamp(40px, 3vw, 56px);
+  --spacing-header:      clamp(36px, 4.5vh, 48px);
+  --spacing-footer:      clamp(24px, 3vh, 32px);
+  --spacing-tab-bar:     clamp(36px, 4.5vh, 48px);
+
+  --max-width-chat: clamp(600px, 60vw, 1200px);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --animate-pulse-dot: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@theme inline {
+  --color-background:             hsl(var(--background));
+  --color-foreground:             hsl(var(--foreground));
+  --color-card:                   hsl(var(--card));
+  --color-card-foreground:        hsl(var(--card-foreground));
+  --color-popover:                hsl(var(--popover));
+  --color-popover-foreground:     hsl(var(--popover-foreground));
+  --color-primary:                hsl(var(--primary));
+  --color-primary-foreground:     hsl(var(--primary-foreground));
+  --color-secondary:              hsl(var(--secondary));
+  --color-secondary-foreground:   hsl(var(--secondary-foreground));
+  --color-muted:                  hsl(var(--muted));
+  --color-muted-foreground:       hsl(var(--muted-foreground));
+  --color-accent:                 hsl(var(--accent));
+  --color-accent-foreground:      hsl(var(--accent-foreground));
+  --color-destructive:            hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border:                 hsl(var(--border));
+  --color-input:                  hsl(var(--input));
+  --color-ring:                   hsl(var(--ring));
+
+  --color-brand-secondary: hsl(var(--brand-secondary));
+  --color-brand-tertiary:  hsl(var(--brand-tertiary));
+  --color-brand-muted:     hsl(var(--brand-muted));
+  --color-brand-warm:      hsl(var(--brand-warm));
+
+  --color-user-bubble:             hsl(var(--user-bubble));
+  --color-user-bubble-foreground:  hsl(var(--user-bubble-foreground));
+  --color-user-bubble-border:      hsl(var(--user-bubble-border));
+  --color-agent-bubble:            hsl(var(--agent-bubble));
+  --color-agent-bubble-foreground: hsl(var(--agent-bubble-foreground));
+  --color-agent-bubble-border:     hsl(var(--agent-bubble-border));
+
+  --color-think:            hsl(var(--think));
+  --color-think-foreground: hsl(var(--think-foreground));
+  --color-think-border:     hsl(var(--think-border));
+
+  --color-code-block:            hsl(var(--code-block));
+  --color-code-block-foreground: hsl(var(--code-block-foreground));
+
+  --color-ok:   hsl(var(--ok));
+  --color-warn: hsl(var(--warn));
+  --color-err:  hsl(var(--err));
+  --color-info: hsl(var(--info));
+
+  --color-surface:        hsl(var(--surface));
+  --color-surface-hover:  hsl(var(--surface-hover));
+  --color-surface-active: hsl(var(--surface-active));
+}
+
+@layer base {
+  :root {
+    --background:             120 20% 99%;
+    --foreground:             0 0% 10%;
+    --card:                   120 15% 98%;
+    --card-foreground:        0 0% 10%;
+    --popover:                0 0% 100%;
+    --popover-foreground:     0 0% 10%;
+    --primary:                152 60% 32%;
+    --primary-foreground:     0 0% 100%;
+    --secondary:              110 15% 95%;
+    --secondary-foreground:   120 10% 38%;
+    --muted:                  110 15% 95%;
+    --muted-foreground:       120 8% 55%;
+    --accent:                 110 15% 95%;
+    --accent-foreground:      0 0% 10%;
+    --destructive:            0 60% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --border:                 110 12% 85%;
+    --input:                  110 12% 85%;
+    --ring:                   152 60% 32%;
+
+    --brand-secondary: 82 30% 62%;
+    --brand-tertiary:  106 38% 79%;
+    --brand-muted:     156 18% 47%;
+    --brand-warm:      30 45% 40%;
+
+    --user-bubble:             110 45% 93%;
+    --user-bubble-foreground:  0 0% 10%;
+    --user-bubble-border:      110 35% 80%;
+    --agent-bubble:            120 15% 98%;
+    --agent-bubble-foreground: 0 0% 10%;
+    --agent-bubble-border:     110 12% 90%;
+
+    --think:            40 20% 96%;
+    --think-foreground: 35 14% 43%;
+    --think-border:     38 18% 87%;
+
+    --code-block:            35 18% 94%;
+    --code-block-foreground: 30 30% 18%;
+
+    --ok:   152 60% 32%;
+    --warn: 30 45% 40%;
+    --err:  0 55% 54%;
+    --info: 180 30% 40%;
+
+    --surface:        120 15% 98%;
+    --surface-hover:  110 15% 92%;
+    --surface-active: 110 15% 88%;
+  }
+
+  .dark {
+    --background:             140 15% 6%;
+    --foreground:             110 12% 89%;
+    --card:                   140 14% 11%;
+    --card-foreground:        110 12% 89%;
+    --popover:                140 14% 11%;
+    --popover-foreground:     110 12% 89%;
+    --primary:                148 40% 56%;
+    --primary-foreground:     140 15% 6%;
+    --secondary:              140 14% 13%;
+    --secondary-foreground:   120 10% 63%;
+    --muted:                  140 14% 13%;
+    --muted-foreground:       120 10% 44%;
+    --accent:                 140 14% 13%;
+    --accent-foreground:      110 12% 89%;
+    --destructive:            0 55% 65%;
+    --destructive-foreground: 140 15% 6%;
+    --border:                 140 14% 18%;
+    --input:                  140 14% 18%;
+    --ring:                   148 40% 56%;
+
+    --brand-secondary: 82 30% 62%;
+    --brand-tertiary:  120 22% 55%;
+    --brand-muted:     156 18% 56%;
+    --brand-warm:      30 45% 54%;
+
+    --user-bubble:             140 30% 14%;
+    --user-bubble-foreground:  110 12% 89%;
+    --user-bubble-border:      140 25% 22%;
+    --agent-bubble:            140 14% 11%;
+    --agent-bubble-foreground: 110 12% 89%;
+    --agent-bubble-border:     140 14% 18%;
+
+    --think:            80 12% 9%;
+    --think-foreground: 70 6% 50%;
+    --think-border:     80 10% 16%;
+
+    --code-block:            130 15% 10%;
+    --code-block-foreground: 90 20% 70%;
+
+    --ok:   148 40% 56%;
+    --warn: 30 45% 54%;
+    --err:  0 55% 65%;
+    --info: 180 30% 54%;
+
+    --surface:        140 14% 8%;
+    --surface-hover:  140 14% 15%;
+    --surface-active: 140 14% 18%;
+  }
+
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ===== Scrollbar ===== */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--muted-foreground) / 0.4); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== Markdown prose overrides ===== */
+.markdown-body h1 { font-size: var(--text-base); font-weight: 700; margin-top: 1rem; margin-bottom: 0.5rem; }
+.markdown-body h2 { font-size: 12.5px; font-weight: 700; margin-top: 0.75rem; margin-bottom: 0.375rem; }
+.markdown-body h3 { font-size: 12.5px; font-weight: 600; margin-top: 0.625rem; margin-bottom: 0.25rem; }
+.markdown-body p  { font-size: 12.5px; line-height: 1.625; margin-bottom: 0.5rem; }
+.markdown-body p:last-child { margin-bottom: 0; }
+.markdown-body ul { list-style-type: disc; padding-left: 1rem; margin-bottom: 0.5rem; font-size: 12.5px; }
+.markdown-body ol { list-style-type: decimal; padding-left: 1rem; margin-bottom: 0.5rem; font-size: 12.5px; }
+.markdown-body li { margin-bottom: 0.125rem; }
+.markdown-body hr { margin-top: 0.75rem; margin-bottom: 0.75rem; border-color: hsl(var(--border)); }
+.markdown-body strong { font-weight: 600; color: hsl(var(--foreground)); }
+.markdown-body pre code { font-size: 11.5px; font-family: var(--font-mono); background: transparent !important; }

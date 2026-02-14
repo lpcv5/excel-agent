@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "npx.ps1",
+      "args": [
+        "shadcn@latest",
+        "mcp"
+      ]
+    },
+    "docs-langchain": {
+      "type": "http",
+      "url": "https://docs.langchain.com/mcp"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "enabledMcpjsonServers": [
+    "shadcn",
+    "docs-langchain"
+  ],
+  "enableAllProjectMcpServers": true
+}
