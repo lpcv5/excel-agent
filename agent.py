@@ -9,18 +9,18 @@ generation, and report creation.
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from excel_tools import EXCEL_TOOLS
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph.state import CompiledStateGraph
 
 
 def create_excel_agent(
     model: str = "openai:gpt-5-mini",
-):
+) -> CompiledStateGraph:
     """
     Create and configure the Excel Agent using DeepAgents harness.
 
@@ -88,8 +88,8 @@ def extract_response(result: dict) -> str:
     return "No response"
 
 
-def run_interactive(agent):
-    """Run the agent in interactive mode."""
+def run_interactive(agent: CompiledStateGraph):
+    """Run the agent in interactive mode with streaming output."""
     print("=" * 60)
     print("  Excel Agent - Interactive Mode")
     print("  Type your questions or commands. 'quit' to exit.")
@@ -110,14 +110,111 @@ def run_interactive(agent):
                 print("\nGoodbye!")
                 break
 
-            # Run the agent with configurable thread_id for state persistence
-            result = agent.invoke(
+            # Track state for formatting
+            current_tool_name = None
+            current_tool_args = ""
+            last_content_type = None
+
+            # Stream LLM tokens in real-time using messages mode
+            # The messages mode returns (message_chunk, metadata) tuples directly
+            for message_chunk, _metadata in agent.stream(
                 {"messages": [("user", user_input)]},
                 config={"configurable": {"thread_id": thread_id}},
-            )
+                stream_mode="messages",
+            ):
+                # Get content from message_chunk
+                # message_chunk can be AIMessageChunk with .content attribute
+                # or the content itself in some cases
+                content = getattr(message_chunk, "content", None)
+                if content is None and isinstance(message_chunk, (list, str)):
+                    content = message_chunk
 
-            # Print the response
-            print(f"\nAgent: {extract_response(result)}\n")
+                if not content:
+                    continue
+
+                # Handle list content (OpenAI Responses API style with type fields)
+                if isinstance(content, list):
+                    for item in content:
+                        if not isinstance(item, dict):
+                            # Handle string items in list
+                            if isinstance(item, str):
+                                if last_content_type != "text":
+                                    print()  # New line before text
+                                    last_content_type = "text"
+                                print(item, end="", flush=True)
+                            continue
+
+                        item_type = item.get("type", "")
+
+                        # Handle thinking/reasoning content
+                        if item_type == "thinking":
+                            thinking_text = item.get("thinking", "")
+                            if thinking_text:
+                                if last_content_type != "thinking":
+                                    print("\n💭 Thinking:", flush=True)
+                                    last_content_type = "thinking"
+                                print(thinking_text, end="", flush=True)
+
+                        # Handle tool calls
+                        elif item_type == "function_call":
+                            tool_name = item.get("name", "unknown")
+                            # Only print if it's a new tool call
+                            if current_tool_name != tool_name:
+                                # Print previous tool's args if any
+                                if current_tool_name and current_tool_args:
+                                    print(f"   Args: {current_tool_args}", flush=True)
+                                current_tool_name = tool_name
+                                current_tool_args = ""
+                                print(f"\n🔧 Calling tool: {tool_name}", flush=True)
+                                last_content_type = "tool_call"
+
+                        elif item_type == "function_call_arguments":
+                            # Accumulate tool arguments
+                            args_chunk = item.get("arguments", "")
+                            if args_chunk:
+                                current_tool_args += args_chunk
+
+                        # Handle text output
+                        elif item_type == "text":
+                            text = item.get("text", "")
+                            if text:
+                                # Print accumulated tool args before text output
+                                if current_tool_name and current_tool_args:
+                                    print(f"   Args: {current_tool_args}", flush=True)
+                                    current_tool_args = ""
+                                if last_content_type not in ("text", None):
+                                    print()  # New line before text output
+                                last_content_type = "text"
+                                print(text, end="", flush=True)
+
+                        # Handle refusal (content filter)
+                        elif item_type == "refusal":
+                            refusal = item.get("refusal", "")
+                            if refusal:
+                                print(f"\n⚠️ Refusal: {refusal}", flush=True)
+
+                        # Handle unknown types - print raw for debugging
+                        elif item_type:
+                            # Skip empty type items
+                            pass
+
+                # Handle string content (simple case - standard LangChain format)
+                elif isinstance(content, str):
+                    if content.strip():
+                        # Print accumulated tool args before text output
+                        if current_tool_name and current_tool_args:
+                            print(f"   Args: {current_tool_args}", flush=True)
+                            current_tool_args = ""
+                        if last_content_type not in ("text", None):
+                            print()  # New line before text
+                        last_content_type = "text"
+                        print(content, end="", flush=True)
+
+            # Print any remaining tool args
+            if current_tool_name and current_tool_args:
+                print(f"   Args: {current_tool_args}", flush=True)
+
+            print("\n")  # New line after streaming completes
 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
