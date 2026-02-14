@@ -11,11 +11,14 @@ dependencies = [
     "pywin32>=311",
 ]
 
-[project.optional-dependencies]
-test = [
+[dependency-groups]
+dev = [
     "pytest>=9.0.2",
     "pytest-mock>=3.15.1",
     "pytest-cov>=7.0.0",
+    "ruff",
+    "build",
+    "twine",
 ]
 
 [build-system]
