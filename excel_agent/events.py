@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Optional
 
 # Re-export commonly used events from stream-msg-parser
-from stream_msg_parser.events import (
+from libs.stream_msg_parser.events import (
     ContentEvent,
     ToolCallEndEvent,
     CompleteEvent,

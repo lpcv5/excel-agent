@@ -8,7 +8,7 @@ this parser works with stream_mode="messages" for token-level streaming.
 import time
 from typing import Any, AsyncGenerator, Optional
 
-from stream_msg_parser.events import (
+from .events import (
     CompleteEvent,
     ContentEvent,
     ErrorEvent,

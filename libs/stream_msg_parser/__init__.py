@@ -5,7 +5,7 @@ with stream_mode="messages", supporting token-level content streaming
 and tool call lifecycle tracking.
 """
 
-from stream_msg_parser.events import (
+from .events import (
     CompleteEvent,
     ContentEvent,
     ErrorEvent,
@@ -14,7 +14,7 @@ from stream_msg_parser.events import (
     ToolCallEndEvent,
     ToolCallStartEvent,
 )
-from stream_msg_parser.parser import MessageParser
+from .parser import MessageParser
 
 __all__ = [
     "MessageParser",

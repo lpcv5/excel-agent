@@ -8,7 +8,6 @@ dependencies = [
     "deepagents",
     "langchain-openai>=1.1.9",
     "langgraph>=1.0.8",
-    "stream-msg-parser",
     "pywin32>=311",
 ]
 
@@ -41,4 +40,3 @@ markers = [
 
 [tool.uv.sources]
 deepagents = { path = "libs/deepagents/libs/deepagents", editable = true }
-stream-msg-parser = { path = "libs/stream-msg-parser", editable = true }
