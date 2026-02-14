@@ -9,9 +9,9 @@ implementations are in the ui package.
 """
 
 import argparse
-from pathlib import Path
+import asyncio
 
-from excel_tools import EXCEL_TOOLS
+from tools.excel_tool import EXCEL_TOOLS
 
 
 def main():
@@ -32,6 +32,12 @@ Examples:
 
   # With specific model
   uv run python agent.py --model openai:gpt-4 "Analyze data.xlsx"
+
+  # With LLM call logging (for debugging)
+  uv run python agent.py --log-level DEBUG "Read data.xlsx"
+
+  # With logging to file
+  uv run python agent.py --log-level DEBUG --log-file logs/llm.log "Analyze data.xlsx"
         """,
     )
 
@@ -79,6 +85,20 @@ Examples:
         version="Excel Agent 0.2.0",
     )
 
+    # Logging options
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default=None,
+        help="LLM call logging level (default: no logging)",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Log file path (default: console only)",
+    )
+
     args = parser.parse_args()
 
     # Handle --list-tools
@@ -93,10 +113,7 @@ Examples:
     # Build configuration
     from excel_agent.config import AgentConfig
 
-    config = AgentConfig(
-        model=args.model,
-        working_dir=Path(args.dir) if args.dir else Path.cwd(),
-    )
+    config = AgentConfig.from_cli_args(args)
 
     # Select and run UI mode
     if args.web:
@@ -112,7 +129,10 @@ Examples:
         if args.query:
             runner.run_single_query(args.query)
         else:
-            runner.run()
+            try:
+                asyncio.run(runner.run())
+            except KeyboardInterrupt:
+                pass  # User exited via Ctrl+C, already handled in runner
 
 
 if __name__ == "__main__":

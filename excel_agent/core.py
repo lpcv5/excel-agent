@@ -7,23 +7,33 @@ agent logic independent of any UI implementation. It provides:
 - Event-based output for UI consumption
 """
 
-from collections.abc import Generator
-from typing import Optional
+import logging
+from collections.abc import AsyncGenerator
+from typing import Any, Optional
 
 from langgraph.graph.state import CompiledStateGraph
+from stream_msg_parser import MessageParser
+from stream_msg_parser.events import (
+    ContentEvent as ParserContentEvent,
+    ErrorEvent as ParserErrorEvent,
+    ToolCallArgsEvent as ParserToolCallArgsEvent,
+    ToolCallStartEvent as ParserToolCallStartEvent,
+    ToolCallEndEvent,
+    CompleteEvent,
+    StreamEvent,
+)
 
 from excel_agent.config import AgentConfig
 from excel_agent.events import (
     AgentEvent,
     ErrorEvent,
-    EventType,
     QueryEndEvent,
     QueryStartEvent,
-    RefusalEvent,
     TextEvent,
     ThinkingEvent,
     ToolCallArgsEvent,
     ToolCallStartEvent,
+    ToolResultEvent,
 )
 
 
@@ -39,8 +49,8 @@ class AgentCore:
         config = AgentConfig(model="openai:gpt-5-mini")
         core = AgentCore(config)
 
-        # Streaming mode
-        for event in core.stream_query("Read sales.xlsx"):
+        # Streaming mode (async)
+        async for event in core.astream_query("Read sales.xlsx"):
             handle_event(event)
 
         # Single query mode
@@ -55,6 +65,69 @@ class AgentCore:
         """
         self.config = config or AgentConfig()
         self._agent: Optional[CompiledStateGraph] = None
+        self._parser = MessageParser(track_tool_lifecycle=True)
+        self._tool_args_buffer: dict[str, str] = {}  # Buffer for accumulating tool args
+        self._logger: Optional[logging.Logger] = self._setup_logger()
+
+    def _setup_logger(self) -> Optional[logging.Logger]:
+        """Set up logger for LLM call logging.
+
+        Returns:
+            Configured logger instance or None if logging is disabled
+        """
+        if not self.config.logging.enabled:
+            return None
+
+        from excel_agent.logging_config import setup_logging
+
+        return setup_logging(self.config.logging)
+
+    def _log_stream_event(self, event: StreamEvent, elapsed_ms: Optional[float] = None) -> None:
+        """Log a stream event.
+
+        Args:
+            event: The stream event to log
+            elapsed_ms: Optional elapsed time in milliseconds
+        """
+        if self._logger is None:
+            return
+
+        import json
+        from datetime import datetime
+
+        log_data: dict[str, Any] = {
+            "event": event.__class__.__name__,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        if elapsed_ms is not None:
+            log_data["elapsed_ms"] = round(elapsed_ms, 2)
+
+        # Extract event-specific data
+        if isinstance(event, ParserContentEvent):
+            log_data["node"] = getattr(event, "node", None)
+            log_data["content"] = event.content
+        elif isinstance(event, ParserToolCallStartEvent):
+            log_data["tool_name"] = event.name
+            log_data["args"] = event.args
+        elif isinstance(event, ToolCallEndEvent):
+            log_data["tool_call_id"] = getattr(event, "id", None)
+            log_data["tool_name"] = getattr(event, "name", None)
+            log_data["status"] = getattr(event, "status", None)
+            log_data["duration_ms"] = getattr(event, "duration_ms", None)
+            # Truncate result for readability
+            result = getattr(event, "result", None)
+            if result:
+                result_str = str(result)
+                log_data["result"] = result_str[:500] + "..." if len(result_str) > 500 else result_str
+            if hasattr(event, "error_message") and event.error_message:
+                log_data["error_message"] = event.error_message
+        elif isinstance(event, ParserErrorEvent):
+            log_data["error"] = event.error
+
+        self._logger.debug(
+            f"Stream Event:\n{json.dumps(log_data, indent=2, ensure_ascii=False, default=str)}"
+        )
 
     @property
     def agent(self) -> CompiledStateGraph:
@@ -65,7 +138,7 @@ class AgentCore:
 
     def _create_agent(self) -> CompiledStateGraph:
         """Create the DeepAgent with Excel tools."""
-        from excel_tools import EXCEL_TOOLS
+        from tools.excel_tool import EXCEL_TOOLS
 
         from deepagents import create_deep_agent
         from deepagents.backends import FilesystemBackend
@@ -102,15 +175,15 @@ or wants to work with Excel files, use paths relative to this directory or absol
             checkpointer=MemorySaver(),
         )
 
-    def stream_query(
+    async def astream_query(
         self,
         query: str,
         thread_id: Optional[str] = None,
-    ) -> Generator[AgentEvent, None, None]:
-        """Execute a query and yield events.
+    ) -> AsyncGenerator[AgentEvent, None]:
+        """Execute a query and yield events asynchronously.
 
-        This is the primary method for UI consumption. It yields
-        typed events that can be rendered by any UI implementation.
+        This is the primary method for UI consumption. It uses
+        langgraph-stream-parser to normalize streaming output.
 
         Args:
             query: User's natural language query
@@ -119,41 +192,31 @@ or wants to work with Excel files, use paths relative to this directory or absol
         Yields:
             AgentEvent instances representing streaming output
         """
+        import time
+
         thread = thread_id or self.config.thread_id
+        start_time = time.perf_counter()
 
         # Yield query start event
         yield QueryStartEvent(content=query)
 
-        # Track state for event generation
-        current_tool_name: Optional[str] = None
-        last_event_type: Optional[EventType] = None
-
         try:
-            for message_chunk, _metadata in self.agent.stream(
+            # Use aiter to convert async stream for MessageParser
+            stream = self.agent.astream(
                 {"messages": [("user", query)]},
                 config={"configurable": {"thread_id": thread}},
                 stream_mode="messages",
-            ):
-                content = getattr(message_chunk, "content", None)
-                if content is None and isinstance(message_chunk, (list, str)):
-                    content = message_chunk
+            )
 
-                if not content:
-                    continue
+            # Use async parse
+            async for parser_event in self._parser.aparse(stream):
+                # Log the stream event
+                elapsed = (time.perf_counter() - start_time) * 1000
+                self._log_stream_event(parser_event, elapsed)
 
-                # Process content and yield appropriate events
-                for event in self._process_content(
-                    content,
-                    current_tool_name,
-                    last_event_type,
-                ):
-                    # Update tracking state
-                    if isinstance(event, ToolCallStartEvent):
-                        current_tool_name = event.tool_name
-                    elif event.type == EventType.TEXT:
-                        current_tool_name = None
-
-                    last_event_type = event.type
+                # Convert parser events to our event types
+                event = self._convert_event(parser_event)
+                if event:
                     yield event
 
             # Yield query end event
@@ -162,51 +225,84 @@ or wants to work with Excel files, use paths relative to this directory or absol
         except Exception as e:
             yield ErrorEvent(error_message=str(e))
 
-    def _process_content(
-        self,
-        content,
-        current_tool_name: Optional[str],
-        last_event_type: Optional[EventType],
-    ) -> Generator[AgentEvent, None, None]:
-        """Process message content and yield events."""
-        if isinstance(content, list):
-            # OpenAI Responses API style with type fields
-            for item in content:
-                if not isinstance(item, dict):
-                    if isinstance(item, str):
-                        yield TextEvent(content=item)
-                    continue
+    def _convert_event(self, parser_event: StreamEvent) -> Optional[AgentEvent]:
+        """Convert langgraph-stream-parser event to our event type."""
+        if isinstance(parser_event, ParserContentEvent):
+            content = parser_event.content
 
-                item_type = item.get("type", "")
+            # Strip reasoning summary prefix if present
+            # Format: {'id': 'rs_...', 'summary': [], 'type': 'reasoning'} actual text
+            if isinstance(content, str) and content.startswith("{'id':"):
+                import re
+                # Check if this is a reasoning block
+                if "'type': 'reasoning'" in content or '"type": "reasoning"' in content:
+                    match = re.match(r"^\{[^}]*\}\s*(.*)$", content)
+                    if match:
+                        extracted = match.group(1)
+                        # If there's actual content after the reasoning block, use it
+                        if extracted and extracted.strip():
+                            content = extracted
+                        else:
+                            return None  # Skip reasoning-only content
+                    else:
+                        return None  # Can't parse, skip
 
-                if item_type == "thinking":
-                    thinking_text = item.get("thinking", "")
-                    if thinking_text:
-                        yield ThinkingEvent(content=thinking_text)
+            # Skip content that is just tool call arguments dict
+            # Format: {'arguments': '...', 'call_id': '...', 'name': '...'}
+            if isinstance(content, str) and content.startswith("{'arguments':"):
+                return None
 
-                elif item_type == "function_call":
-                    tool_name = item.get("name", "unknown")
-                    yield ToolCallStartEvent(tool_name=tool_name)
+            # Skip empty content (but preserve whitespace/newlines)
+            if not content:
+                return None
 
-                elif item_type == "function_call_arguments":
-                    args_chunk = item.get("arguments", "")
-                    if args_chunk and current_tool_name:
-                        yield ToolCallArgsEvent(
-                            tool_name=current_tool_name,
-                            content=args_chunk,
-                        )
+            # Check for thinking/reasoning content
+            if hasattr(parser_event, "node") and parser_event.node == "thinking":
+                return ThinkingEvent(content=content)
+            return TextEvent(content=content)
 
-                elif item_type == "text":
-                    text = item.get("text", "")
-                    if text:
-                        yield TextEvent(content=text)
+        elif isinstance(parser_event, ParserToolCallStartEvent):
+            import json as json_mod
+            return ToolCallStartEvent(
+                tool_name=parser_event.name,
+                tool_args=json_mod.dumps(parser_event.args)
+            )
 
-                elif item_type == "refusal":
-                    refusal = item.get("refusal", "")
-                    yield RefusalEvent(content=refusal)
+        elif isinstance(parser_event, ParserToolCallArgsEvent):
+            # Tool call args chunk - emit with the partial args
+            import json as json_mod
+            # Accumulate the args
+            existing_args = getattr(self, '_tool_args_buffer', {})
+            tool_id = parser_event.id
+            if tool_id:
+                existing_args[tool_id] = existing_args.get(tool_id, '') + parser_event.args
+                self._tool_args_buffer = existing_args
+            return ToolCallArgsEvent(
+                tool_name=parser_event.name,
+                content=parser_event.args,
+            )
 
-        elif isinstance(content, str) and content.strip():
-            yield TextEvent(content=content)
+        elif isinstance(parser_event, ToolCallEndEvent):
+            # Tool completed - emit result event
+            # Check for error status
+            if parser_event.status == "error":
+                return ErrorEvent(
+                    error_message=parser_event.error_message or "Tool call failed"
+                )
+            return ToolResultEvent(
+                tool_name=parser_event.name,
+                content=str(parser_event.result)[:1000] if parser_event.result else "",
+                data={"status": parser_event.status, "duration_ms": parser_event.duration_ms}
+            )
+
+        elif isinstance(parser_event, ParserErrorEvent):
+            return ErrorEvent(error_message=parser_event.error)
+
+        elif isinstance(parser_event, CompleteEvent):
+            # Stream completed - handled by QueryEndEvent
+            return None
+
+        return None
 
     def invoke(
         self,
@@ -261,7 +357,7 @@ or wants to work with Excel files, use paths relative to this directory or absol
         """
         import json
 
-        from excel_tools import excel_status
+        from tools.excel_tool import excel_status
 
         result = excel_status.invoke({})
         return json.loads(result)

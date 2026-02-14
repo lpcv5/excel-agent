@@ -8,8 +8,9 @@ class TestMain:
     """Tests for main function."""
 
     @patch("sys.argv", ["agent.py"])
+    @patch("asyncio.run")
     @patch("ui.cli.runner.CLIRunner")
-    def test_main_cli_mode(self, mock_runner_class):
+    def test_main_cli_mode(self, mock_runner_class, mock_asyncio_run):
         """Test main runs in CLI mode by default."""
         mock_runner = MagicMock()
         mock_runner_class.return_value = mock_runner
@@ -18,6 +19,7 @@ class TestMain:
 
         main()
 
+        mock_asyncio_run.assert_called_once()
         mock_runner.run.assert_called_once()
 
     @patch("sys.argv", ["agent.py", "test query"])

@@ -2,10 +2,9 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from excel_com.manager import ExcelAppManager
-from excel_com import formula_ops
+from libs.excel_com.manager import ExcelAppManager
+from libs.excel_com import formula_ops
 
 
 class TestSetFormula:
@@ -30,7 +29,7 @@ class TestSetFormula:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formula_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formula_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formula_ops.set_formula(
                 manager, mock_workbook, "Sheet1", "A1", "=SUM(B1:B10)"
             )
@@ -50,7 +49,7 @@ class TestSetFormula:
         mock_worksheet.Range.return_value = mock_range
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formula_ops.preserve_user_state") as mock_preserve:
+        with patch("libs.excel_com.formula_ops.preserve_user_state") as mock_preserve:
             mock_preserve.return_value.__enter__ = MagicMock(return_value=None)
             mock_preserve.return_value.__exit__ = MagicMock(return_value=None)
 
@@ -72,7 +71,7 @@ class TestSetFormula:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formula_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formula_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formula_ops.set_formula(
                 manager, mock_workbook, "Sheet1", "A1:A10", "=ROW()"
             )

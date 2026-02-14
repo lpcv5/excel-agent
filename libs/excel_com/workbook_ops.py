@@ -26,6 +26,51 @@ from .context import preserve_user_state
 # Workbook Lifecycle Operations
 # =============================================================================
 
+def create_workbook(
+    manager: ExcelAppManager,
+    filepath: Optional[str] = None,
+    sheet_names: Optional[list[str]] = None
+) -> tuple[object, list[str]]:
+    """Create a new Excel workbook.
+
+    Args:
+        manager: ExcelAppManager instance
+        filepath: Optional path to save the workbook to
+        sheet_names: Optional list of sheet names to create (default: ["Sheet1"])
+
+    Returns:
+        Tuple of (workbook COM object, list of worksheet names)
+
+    Raises:
+        Exception: For COM errors
+    """
+    workbook = manager.create_workbook(filepath)
+
+    # Get all worksheets
+    worksheets = manager.list_worksheets(workbook)
+
+    # If specific sheet names provided, rename/create sheets
+    if sheet_names:
+        # Excel creates with 1 sheet by default, add more if needed
+        for i, name in enumerate(sheet_names):
+            if i == 0 and worksheets:
+                # Rename the default sheet
+                worksheet = manager.get_worksheet(workbook, worksheets[0])
+                worksheet.Name = name
+            else:
+                # Add new sheets
+                workbook.Worksheets.Add(After=workbook.Worksheets(workbook.Worksheets.Count))
+                workbook.Worksheets(workbook.Worksheets.Count).Name = name
+
+        worksheets = manager.list_worksheets(workbook)
+
+    # Save if filepath provided
+    if filepath:
+        manager.save_workbook(workbook, filepath)
+
+    return (workbook, worksheets)
+
+
 def open_workbook(
     manager: ExcelAppManager,
     filepath: str,
@@ -166,7 +211,7 @@ def copy_worksheet(
         The copied Worksheet COM object
     """
     worksheet = manager.get_worksheet(workbook, name)
-    new_sheet = worksheet.Copy(After=worksheet)
+    worksheet.Copy(After=worksheet)
     if new_name:
         workbook.ActiveSheet.Name = new_name
     return workbook.ActiveSheet

@@ -1,10 +1,10 @@
 """Tests for excel_com/context.py."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from excel_com.context import UserStatePreserver, preserve_user_state
+from libs.excel_com.context import UserStatePreserver, preserve_user_state
 
 
 class TestUserStatePreserver:

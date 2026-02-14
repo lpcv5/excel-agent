@@ -2,11 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from excel_com.manager import ExcelAppManager
-from excel_com import formatting_ops
-from excel_com.constants import (
+from libs.excel_com.manager import ExcelAppManager
+from libs.excel_com import formatting_ops
+from libs.excel_com.constants import (
     XL_UNDERLINE_STYLE_SINGLE,
     XL_UNDERLINE_STYLE_NONE,
     HORIZONTAL_ALIGNMENT_MAP,
@@ -40,7 +39,7 @@ class TestSetFontFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_font_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 font_name="Arial",
@@ -72,7 +71,7 @@ class TestSetFontFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_font_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 bold=True,
@@ -99,7 +98,7 @@ class TestSetFontFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_font_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 underline=False
@@ -119,7 +118,7 @@ class TestSetFontFormat:
         mock_worksheet.Range.return_value = mock_range
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state") as mock_preserve:
+        with patch("libs.excel_com.formatting_ops.preserve_user_state") as mock_preserve:
             mock_preserve.return_value.__enter__ = MagicMock(return_value=None)
             mock_preserve.return_value.__exit__ = MagicMock(return_value=None)
 
@@ -152,7 +151,7 @@ class TestSetCellFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_cell_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 horizontal_alignment="center",
@@ -178,7 +177,7 @@ class TestSetCellFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_cell_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 wrap_text=True
@@ -213,7 +212,7 @@ class TestSetBorderFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_border_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 edge="left",
@@ -241,7 +240,7 @@ class TestSetBorderFormat:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_border_format(
                 manager, mock_workbook, "Sheet1", "A1:D10",
                 edge="all",
@@ -279,7 +278,7 @@ class TestSetBackgroundColor:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_background_color(
                 manager, mock_workbook, "Sheet1", "A1:D10", "FFFF00"
             )
@@ -311,7 +310,7 @@ class TestAutoFitColumns:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.auto_fit_columns(
                 manager, mock_workbook, "Sheet1", "A:D"
             )
@@ -332,7 +331,7 @@ class TestAutoFitColumns:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.auto_fit_columns(
                 manager, mock_workbook, "Sheet1"
             )
@@ -362,7 +361,7 @@ class TestSetColumnWidth:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_column_width(
                 manager, mock_workbook, "Sheet1", "A:C", 15.5
             )
@@ -392,7 +391,7 @@ class TestSetRowHeight:
 
         manager.get_worksheet.return_value = mock_worksheet
 
-        with patch("excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
+        with patch("libs.excel_com.formatting_ops.preserve_user_state", return_value=self._create_mock_preserve_context()):
             formatting_ops.set_row_height(
                 manager, mock_workbook, "Sheet1", "1:5", 20.0
             )

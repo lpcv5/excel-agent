@@ -1,8 +1,7 @@
 """Tests for excel_com/exceptions.py."""
 
-import pytest
 
-from excel_com.exceptions import (
+from libs.excel_com.exceptions import (
     # Base exception
     ExcelMCPError,
     # Workbook exceptions

@@ -1,8 +1,7 @@
 """Tests for excel_com/constants.py."""
 
-import pytest
 
-from excel_com.constants import (
+from libs.excel_com.constants import (
     # Underline styles
     XL_UNDERLINE_STYLE_SINGLE,
     XL_UNDERLINE_STYLE_NONE,

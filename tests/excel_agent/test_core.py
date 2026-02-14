@@ -69,36 +69,22 @@ class TestAgentCore:
             config={"configurable": {"thread_id": "custom-thread"}},
         )
 
-    def test_stream_query_yields_events(self):
-        """Test AgentCore.stream_query yields events."""
-        from excel_agent.core import AgentCore
-        from excel_agent.events import QueryStartEvent, TextEvent, QueryEndEvent
+    def test_astream_query_handles_exception(self):
+        """Test AgentCore.astream_query handles exceptions."""
+        import asyncio
 
-        core = AgentCore()
-        core._agent = MagicMock()
-        # Create a mock message chunk with text content
-        mock_chunk = MagicMock()
-        mock_chunk.content = [{"type": "text", "text": "Hello"}]
-        core._agent.stream.return_value = iter([(mock_chunk, {})])
-
-        events = list(core.stream_query("test query"))
-
-        # Should yield QueryStartEvent, TextEvent, and QueryEndEvent
-        assert len(events) == 3
-        assert isinstance(events[0], QueryStartEvent)
-        assert isinstance(events[1], TextEvent)
-        assert isinstance(events[2], QueryEndEvent)
-
-    def test_stream_query_handles_exception(self):
-        """Test AgentCore.stream_query handles exceptions."""
         from excel_agent.core import AgentCore
         from excel_agent.events import ErrorEvent
 
         core = AgentCore()
         core._agent = MagicMock()
-        core._agent.stream.side_effect = Exception("Test error")
+        core._agent.astream.side_effect = Exception("Test error")
 
-        events = list(core.stream_query("test query"))
+        async def test():
+            events = [e async for e in core.astream_query("test query")]
+            return events
+
+        events = asyncio.run(test())
 
         # Should yield an ErrorEvent
         assert len(events) == 2  # QueryStartEvent + ErrorEvent
@@ -170,3 +156,43 @@ class TestAgentCore:
 
         assert new_id == "custom-thread-id"
         assert core.config.thread_id == "custom-thread-id"
+
+
+@pytest.mark.integration
+class TestAgentCoreIntegration:
+    """Integration tests requiring real LLM calls.
+
+    Run with: pytest -m integration
+    Skip with: pytest -m "not integration"
+    """
+
+    def test_astream_query_with_real_llm(self):
+        """Test astream_query with real LLM call.
+
+        This test requires OPENAI_API_KEY to be set.
+        """
+        import asyncio
+        import os
+
+        if not os.environ.get("OPENAI_API_KEY"):
+            pytest.skip("OPENAI_API_KEY not set")
+
+        from excel_agent.core import AgentCore
+        from excel_agent.events import QueryStartEvent, QueryEndEvent, TextEvent
+
+        core = AgentCore()
+
+        async def run_test():
+            events = [e async for e in core.astream_query("Say 'hello' and nothing else")]
+            return events
+
+        events = asyncio.run(run_test())
+
+        # Should have at least QueryStart, some content, and QueryEnd
+        assert len(events) >= 2
+        assert isinstance(events[0], QueryStartEvent)
+        assert isinstance(events[-1], QueryEndEvent)
+
+        # Should have some text content
+        text_events = [e for e in events if isinstance(e, TextEvent)]
+        assert len(text_events) > 0
