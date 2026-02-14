@@ -1,0 +1,3 @@
+[submodule "libs/deepagents"]
+	path = libs/deepagents
+	url = https://github.com/lpcv5/deepagents.git
