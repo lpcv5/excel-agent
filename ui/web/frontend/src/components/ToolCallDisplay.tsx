@@ -1,5 +1,7 @@
-import { Wrench, CheckCircle, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { Wrench, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { ToolCall } from '@/hooks/useChat'
 
 interface ToolCallDisplayProps {
@@ -10,36 +12,62 @@ interface ToolCallDisplayProps {
 export function ToolCallDisplay({ toolCall, isStreaming }: ToolCallDisplayProps) {
   const isRunning = toolCall.status === 'running' || isStreaming
   const isCompleted = toolCall.status === 'completed'
+  const isError = toolCall.status === 'error'
+  const [expanded, setExpanded] = useState(false)
 
   return (
     <div className="flex flex-col gap-1 rounded-lg border bg-muted/50 p-3 text-sm">
       <div className="flex items-center gap-2">
         {isRunning ? (
           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+        ) : isError ? (
+          <Wrench className="h-4 w-4 text-red-500" />
         ) : isCompleted ? (
           <CheckCircle className="h-4 w-4 text-green-500" />
         ) : (
           <Wrench className="h-4 w-4 text-muted-foreground" />
         )}
         <span className="font-medium">{toolCall.name}</span>
-        <Badge variant={isCompleted ? 'success' : 'secondary'} className="ml-auto">
-          {isRunning ? 'Running' : isCompleted ? 'Completed' : 'Pending'}
+        <Badge variant={isError ? 'destructive' : isCompleted ? 'success' : 'secondary'} className="ml-auto">
+          {isRunning ? 'Running' : isError ? 'Error' : isCompleted ? 'Completed' : 'Pending'}
         </Badge>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-1 h-7 px-2"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="mr-1 h-3 w-3" />
+              Hide
+            </>
+          ) : (
+            <>
+              <ChevronDown className="mr-1 h-3 w-3" />
+              Details
+            </>
+          )}
+        </Button>
       </div>
 
-      {toolCall.args && toolCall.args !== '{}' && (
-        <pre className="mt-2 overflow-x-auto rounded bg-background/50 p-2 text-xs text-muted-foreground">
-          {formatArgs(toolCall.args)}
-        </pre>
-      )}
+      {expanded && (
+        <>
+          {toolCall.args && toolCall.args !== '{}' && (
+            <pre className="mt-2 max-w-full overflow-x-auto rounded bg-background/50 p-2 text-xs text-muted-foreground">
+              {formatArgs(toolCall.args)}
+            </pre>
+          )}
 
-      {toolCall.result && (
-        <div className="mt-2">
-          <span className="text-xs font-medium text-muted-foreground">Result:</span>
-          <pre className="mt-1 max-h-32 overflow-auto rounded bg-background/50 p-2 text-xs text-muted-foreground">
-            {truncateResult(toolCall.result, 500)}
-          </pre>
-        </div>
+          {toolCall.result && (
+            <div className="mt-2 max-w-full">
+              <span className="text-xs font-medium text-muted-foreground">Result:</span>
+              <pre className="mt-1 max-h-32 max-w-full overflow-auto rounded bg-background/50 p-2 text-xs text-muted-foreground">
+                {truncateResult(toolCall.result, 500)}
+              </pre>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

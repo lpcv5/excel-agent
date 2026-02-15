@@ -3,6 +3,7 @@ import { User, Bot, Brain, MoreVertical, Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/hooks/useChat'
 import { ToolCallList } from './ToolCallDisplay'
+import { Markdown } from './Markdown'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,7 +79,7 @@ export function MessageItem({ message }: MessageItemProps) {
       {/* Content Card */}
       <div
         className={cn(
-          'relative flex max-w-[85%] flex-col rounded-xl border bg-card',
+          'relative flex w-fit max-w-[85%] flex-col overflow-hidden rounded-xl border bg-card',
           isUser ? 'items-end' : 'items-start'
         )}
       >
@@ -122,7 +123,7 @@ export function MessageItem({ message }: MessageItemProps) {
         )}
 
         {/* Card Content */}
-        <div className="flex flex-col gap-2 p-3">
+        <div className="flex max-w-full flex-col gap-2 p-3">
           {/* Thinking */}
           {!isUser && message.thinking && (
             <Alert variant="warning" className="p-3">
@@ -139,8 +140,16 @@ export function MessageItem({ message }: MessageItemProps) {
           )}
 
           {/* Message Content */}
-          <div className="whitespace-pre-wrap break-words px-1">
-            {message.content || (message.isStreaming && !message.toolCalls?.length ? (
+          <div className="max-w-full px-1">
+            {message.content ? (
+              isUser ? (
+                <div className="whitespace-pre-wrap break-words text-sm">
+                  {message.content}
+                </div>
+              ) : (
+                <Markdown content={message.content} />
+              )
+            ) : (message.isStreaming && !message.toolCalls?.length ? (
               <span className="animate-pulse">...</span>
             ) : null)}
           </div>

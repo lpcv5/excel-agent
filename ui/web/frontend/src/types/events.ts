@@ -21,6 +21,7 @@ export interface AgentEvent {
   content: string | null
   tool_name: string | null
   tool_args: string | null
+  tool_call_id: string | null
   error_message: string | null
   data: Record<string, unknown>
 }

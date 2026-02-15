@@ -10,8 +10,9 @@ Low-level COM operations are in libs.excel_com package.
 import gc
 import json
 import threading
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Iterator, Any
 
 from langchain_core.tools import tool
 
@@ -24,43 +25,31 @@ from libs.excel_com import workbook_ops, formatting_ops, formula_ops
 
 
 # =============================================================================
-# Thread-Local Excel Manager
+# Singleton Excel Manager + Operation Lock
 # =============================================================================
 
-# Use thread-local storage to ensure each thread has its own Excel manager
-# This is necessary because COM objects cannot be used across threads
-_thread_local = threading.local()
-
-# Global registry of opened workbook paths (shared across threads)
-# This allows different threads to know which workbooks should be open
-_opened_workbooks: set[str] = set()
-_workbook_lock = threading.Lock()
+_excel_manager: ExcelAppManager | None = None
+_excel_lock = threading.RLock()
 
 
 def get_excel_manager() -> ExcelAppManager:
-    """Get or create the thread-local Excel manager instance.
+    """Get or create the singleton Excel manager instance (lazy-loaded)."""
+    global _excel_manager
+    with _excel_lock:
+        if _excel_manager is None:
+            _excel_manager = ExcelAppManager(visible=False, display_alerts=False)
+        manager = _excel_manager
 
-    Each thread gets its own Excel manager to avoid COM threading issues.
-    The manager will automatically re-open any workbooks that were opened
-    in other threads.
-    """
-    if not hasattr(_thread_local, 'manager'):
-        _thread_local.manager = ExcelAppManager(visible=False, display_alerts=False)
+        if not manager.is_running():
+            manager.start()
+        elif not manager.is_app_alive():
+            try:
+                manager.stop(force_quit=False)
+            except Exception:
+                pass
+            manager.start()
 
-    manager = _thread_local.manager
-
-    # Ensure workbooks registered in other threads are opened in this thread
-    if not manager.is_running():
-        manager.start()
-        # Re-open workbooks that were opened in other threads
-        with _workbook_lock:
-            for path in _opened_workbooks:
-                try:
-                    manager.open_workbook(path, read_only=False)
-                except Exception:
-                    pass  # Ignore errors during re-opening
-
-    return manager
+        return manager
 
 
 def cleanup_excel_resources(force: bool = True) -> dict:
@@ -78,22 +67,15 @@ def cleanup_excel_resources(force: bool = True) -> dict:
     """
     errors = []
 
-    # Clear the global workbook registry
-    with _workbook_lock:
-        _opened_workbooks.clear()
-
     # First try graceful COM cleanup
     try:
         cleanup_all_managers()
     except Exception as e:
         errors.append(f"COM cleanup error: {str(e)}")
 
-    # Clear thread-local manager reference
-    if hasattr(_thread_local, 'manager'):
-        try:
-            delattr(_thread_local, 'manager')
-        except Exception:
-            pass
+    # Clear singleton manager reference
+    global _excel_manager
+    _excel_manager = None
 
     # Force multiple rounds of garbage collection
     for _ in range(5):
@@ -128,6 +110,49 @@ def normalize_filepath(filepath: str) -> str:
         return filepath
 
 
+def _ok(summary: str, data: Optional[dict[str, Any]] = None) -> str:
+    payload = {
+        "success": True,
+        "summary": summary,
+        "data": data or {},
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def _err(summary: str, error: str, data: Optional[dict[str, Any]] = None) -> str:
+    payload = {
+        "success": False,
+        "summary": summary,
+        "error": error,
+    }
+    if data is not None:
+        payload["data"] = data
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+@contextmanager
+def workbook_context(
+    filepath: str,
+    read_only: bool,
+    save_on_close: bool,
+) -> Iterator[tuple[ExcelAppManager, object, str]]:
+    """Open a workbook for a single operation and ensure it is closed."""
+    manager = get_excel_manager()
+    normalized_path = normalize_filepath(filepath)
+    with _excel_lock:
+        workbook = manager.open_workbook(normalized_path, read_only=read_only)
+        try:
+            yield manager, workbook, normalized_path
+        finally:
+            try:
+                if manager.is_workbook_owned(normalized_path):
+                    manager.close_workbook(normalized_path, save=save_on_close, force=True)
+                else:
+                    manager.close_workbook(normalized_path, save=save_on_close, force=False)
+            except Exception:
+                pass
+
+
 # =============================================================================
 # Status Tools (1)
 # =============================================================================
@@ -143,23 +168,29 @@ def excel_status() -> str:
         JSON string with Excel status information.
     """
     try:
-        manager = get_excel_manager()
-        is_running = manager.is_running()
+        if _excel_manager is None:
+            return _ok(
+                "Excel not initialized.",
+                {"excel_running": False, "workbook_count": 0, "open_workbooks": []},
+            )
 
+        manager = _excel_manager
+        is_running = manager.is_running() and manager.is_app_alive()
         result = {
             "excel_running": is_running,
             "workbook_count": manager.get_workbook_count() if is_running else 0,
             "open_workbooks": manager.get_open_workbooks() if is_running else [],
         }
 
-        return json.dumps(result, indent=2, ensure_ascii=False)
+        summary = "Excel is running." if is_running else "Excel is not running."
+        return _ok(summary, result)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to get Excel status.", str(e))
 
 
 # =============================================================================
-# Workbook Tools (7)
+# Deprecated Workbook Tools (2)
 # =============================================================================
 
 @tool
@@ -176,32 +207,15 @@ def excel_open_workbook(filepath: str, read_only: bool = False) -> str:
     Returns:
         JSON string with workbook name and list of worksheet names.
     """
-    try:
-        manager = get_excel_manager()
-        manager.start()
+    return _err(
+        "excel_open_workbook is no longer supported.",
+        "Workbooks are opened and closed automatically per tool call.",
+    )
 
-        normalized_path = normalize_filepath(filepath)
-        workbook, worksheets = workbook_ops.open_workbook(manager, normalized_path, read_only)
 
-        # Register the workbook path for cross-thread access
-        with _workbook_lock:
-            _opened_workbooks.add(normalized_path)
-
-        result = {
-            "success": True,
-            "workbook_name": workbook.Name,
-            "workbook_path": normalized_path,
-            "worksheets": worksheets,
-            "read_only": read_only,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except FileNotFoundError:
-        return json.dumps({"error": f"File not found: {filepath}"})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
+# =============================================================================
+# Workbook Tools (3)
+# =============================================================================
 
 @tool
 def excel_create_workbook(filepath: str, sheet_names: Optional[str] = None) -> str:
@@ -219,35 +233,36 @@ def excel_create_workbook(filepath: str, sheet_names: Optional[str] = None) -> s
     """
     try:
         manager = get_excel_manager()
-        manager.start()
-
         normalized_path = normalize_filepath(filepath)
 
-        # Parse sheet names if provided
         sheet_names_list = None
         if sheet_names:
             try:
                 sheet_names_list = json.loads(sheet_names)
             except json.JSONDecodeError:
-                return json.dumps({"error": "sheet_names must be a valid JSON array"})
+                return _err("Invalid sheet_names.", "sheet_names must be a valid JSON array")
 
-        workbook, worksheets = workbook_ops.create_workbook(manager, normalized_path, sheet_names_list)
+        with _excel_lock:
+            workbook, worksheets = workbook_ops.create_workbook(
+                manager, normalized_path, sheet_names_list
+            )
+            workbook_name = workbook.Name
+            try:
+                manager.close_workbook(normalized_path, save=True, force=True)
+            except Exception:
+                pass
 
-        # Register the workbook path for cross-thread access
-        with _workbook_lock:
-            _opened_workbooks.add(normalized_path)
-
-        result = {
-            "success": True,
-            "workbook_name": workbook.Name,
-            "workbook_path": normalized_path,
-            "worksheets": worksheets,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
+        return _ok(
+            f"Workbook created: {workbook_name}",
+            {
+                "workbook_name": workbook_name,
+                "workbook_path": normalized_path,
+                "worksheets": worksheets,
+            },
+        )
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to create workbook.", str(e))
 
 
 @tool
@@ -261,27 +276,19 @@ def excel_list_worksheets(filepath: str) -> str:
         JSON string with list of worksheet names.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
-
-        normalized_path = normalize_filepath(filepath)
-        workbook = manager.get_workbook(normalized_path)
-        worksheets = manager.list_worksheets(workbook)
-
-        result = {
-            "success": True,
-            "workbook_path": normalized_path,
-            "worksheets": worksheets,
-            "count": len(worksheets),
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError:
-        return json.dumps({"error": f"Workbook not open: {filepath}. Open it first with excel_open_workbook."})
+        with workbook_context(filepath, read_only=True, save_on_close=False) as (manager, workbook, path):
+            worksheets = manager.list_worksheets(workbook)
+        return _ok(
+            "Worksheets listed.",
+            {"workbook_path": path, "worksheets": worksheets, "count": len(worksheets)},
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to list worksheets.", str(e))
 
+
+# =============================================================================
+# Range Tools (2)
+# =============================================================================
 
 @tool
 def excel_read_range(
@@ -292,7 +299,7 @@ def excel_read_range(
     """Read data from a specified range in an Excel worksheet.
 
     Args:
-        filepath: Path to the Excel file (must be opened first)
+        filepath: Path to the Excel file (opened automatically)
         worksheet_name: Name of the worksheet to read from
         range_address: Excel range address (e.g., "A1", "A1:D10", "B:B")
 
@@ -300,28 +307,22 @@ def excel_read_range(
         JSON string with the data from the specified range.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=True, save_on_close=False) as (manager, workbook, path):
+            data = workbook_ops.read_range(manager, workbook, worksheet_name, range_address)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        data = workbook_ops.read_range(manager, workbook, worksheet_name, range_address)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "range": range_address,
-            "rows": len(data),
-            "columns": len(data[0]) if data else 0,
-            "data": data,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Range read successfully.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "range": range_address,
+                "rows": len(data),
+                "columns": len(data[0]) if data else 0,
+                "data": data,
+            },
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to read range.", str(e))
 
 
 @tool
@@ -337,7 +338,7 @@ def excel_write_range(
     Data is preserved in the user's current view state.
 
     Args:
-        filepath: Path to the Excel file (must be opened first)
+        filepath: Path to the Excel file (opened automatically)
         worksheet_name: Name of the worksheet to write to
         range_address: Starting cell address (e.g., "A1") or range (e.g., "A1:D10")
         data: JSON string representing 2D array of data to write
@@ -346,34 +347,27 @@ def excel_write_range(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
-
-        # Parse the data
         parsed_data = json.loads(data)
         if not isinstance(parsed_data, list) or not all(isinstance(row, list) for row in parsed_data):
-            return json.dumps({"error": "Data must be a 2D array (list of lists)"})
+            return _err("Invalid data.", "Data must be a 2D array (list of lists)")
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        workbook_ops.write_range(manager, workbook, worksheet_name, range_address, parsed_data)
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            workbook_ops.write_range(manager, workbook, worksheet_name, range_address, parsed_data)
 
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "range": range_address,
-            "rows_written": len(parsed_data),
-            "columns_written": len(parsed_data[0]) if parsed_data else 0,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
+        return _ok(
+            "Range written successfully.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "range": range_address,
+                "rows_written": len(parsed_data),
+                "columns_written": len(parsed_data[0]) if parsed_data else 0,
+            },
+        )
     except json.JSONDecodeError as e:
-        return json.dumps({"error": f"Invalid JSON data: {str(e)}"})
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _err("Invalid JSON data.", str(e))
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to write range.", str(e))
 
 
 @tool
@@ -381,31 +375,22 @@ def excel_save_workbook(filepath: str, save_as: Optional[str] = None) -> str:
     """Save an open Excel workbook.
 
     Args:
-        filepath: Path of the opened workbook to save
+        filepath: Path of the workbook to save
         save_as: Optional new filepath to save as (Save As functionality)
 
     Returns:
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=False) as (manager, workbook, path):
+            manager.save_workbook(workbook, save_as)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        manager.save_workbook(workbook, save_as)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "saved_as": save_as if save_as else filepath,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Workbook saved.",
+            {"workbook_path": path, "saved_as": save_as if save_as else path},
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to save workbook.", str(e))
 
 
 @tool
@@ -419,29 +404,10 @@ def excel_close_workbook(filepath: str, save: bool = True) -> str:
     Returns:
         JSON string with operation result.
     """
-    try:
-        manager = get_excel_manager()
-        manager.start()
-
-        normalized_path = normalize_filepath(filepath)
-        workbook_ops.close_workbook(manager, normalized_path, save)
-
-        # Remove from registry
-        with _workbook_lock:
-            _opened_workbooks.discard(normalized_path)
-
-        result = {
-            "success": True,
-            "workbook_path": normalized_path,
-            "saved": save,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    return _err(
+        "excel_close_workbook is no longer supported.",
+        "Workbooks are opened and closed automatically per tool call.",
+    )
 
 
 # =============================================================================
@@ -465,25 +431,15 @@ def excel_add_worksheet(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            workbook_ops.add_worksheet(manager, workbook, worksheet_name, after)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        workbook_ops.add_worksheet(manager, workbook, worksheet_name, after)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet_name": worksheet_name,
-            "inserted_after": after,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Worksheet added.",
+            {"workbook_path": path, "worksheet_name": worksheet_name, "inserted_after": after},
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to add worksheet.", str(e))
 
 
 @tool
@@ -501,24 +457,15 @@ def excel_delete_worksheet(filepath: str, worksheet_name: str) -> str:
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            workbook_ops.delete_worksheet(manager, workbook, worksheet_name)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        workbook_ops.delete_worksheet(manager, workbook, worksheet_name)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "deleted_worksheet": worksheet_name,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Worksheet deleted.",
+            {"workbook_path": path, "deleted_worksheet": worksheet_name},
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to delete worksheet.", str(e))
 
 
 @tool
@@ -538,25 +485,15 @@ def excel_rename_worksheet(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            workbook_ops.rename_worksheet(manager, workbook, old_name, new_name)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        workbook_ops.rename_worksheet(manager, workbook, old_name, new_name)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "old_name": old_name,
-            "new_name": new_name,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Worksheet renamed.",
+            {"workbook_path": path, "old_name": old_name, "new_name": new_name},
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to rename worksheet.", str(e))
 
 
 @tool
@@ -576,25 +513,19 @@ def excel_copy_worksheet(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            new_sheet = workbook_ops.copy_worksheet(manager, workbook, worksheet_name, new_name)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        new_sheet = workbook_ops.copy_worksheet(manager, workbook, worksheet_name, new_name)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "source_worksheet": worksheet_name,
-            "new_worksheet_name": new_sheet.Name,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Worksheet copied.",
+            {
+                "workbook_path": path,
+                "source_worksheet": worksheet_name,
+                "new_worksheet_name": new_sheet.Name,
+            },
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to copy worksheet.", str(e))
 
 
 @tool
@@ -611,27 +542,21 @@ def excel_get_used_range(filepath: str, worksheet_name: str) -> str:
         JSON string with range address and dimensions.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=True, save_on_close=False) as (manager, workbook, path):
+            address, rows, cols = workbook_ops.get_used_range(manager, workbook, worksheet_name)
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        address, rows, cols = workbook_ops.get_used_range(manager, workbook, worksheet_name)
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "used_range": address,
-            "rows": rows,
-            "columns": cols,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Used range retrieved.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "used_range": address,
+                "rows": rows,
+                "columns": cols,
+            },
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to get used range.", str(e))
 
 
 # =============================================================================
@@ -667,38 +592,32 @@ def excel_set_font_format(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.set_font_format(
+                manager, workbook, worksheet_name, range_address,
+                font_name, size, bold, italic, underline, color
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.set_font_format(
-            manager, workbook, worksheet_name, range_address,
-            font_name, size, bold, italic, underline, color
+        return _ok(
+            "Font format applied.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "range": range_address,
+                "formatting_applied": {
+                    k: v for k, v in {
+                        "font_name": font_name,
+                        "size": size,
+                        "bold": bold,
+                        "italic": italic,
+                        "underline": underline,
+                        "color": color
+                    }.items() if v is not None
+                },
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "range": range_address,
-            "formatting_applied": {
-                k: v for k, v in {
-                    "font_name": font_name,
-                    "size": size,
-                    "bold": bold,
-                    "italic": italic,
-                    "underline": underline,
-                    "color": color
-                }.items() if v is not None
-            }
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set font format.", str(e))
 
 
 @tool
@@ -726,36 +645,30 @@ def excel_set_cell_format(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.set_cell_format(
+                manager, workbook, worksheet_name, range_address,
+                horizontal_alignment, vertical_alignment, wrap_text, number_format
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.set_cell_format(
-            manager, workbook, worksheet_name, range_address,
-            horizontal_alignment, vertical_alignment, wrap_text, number_format
+        return _ok(
+            "Cell format applied.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "range": range_address,
+                "formatting_applied": {
+                    k: v for k, v in {
+                        "horizontal_alignment": horizontal_alignment,
+                        "vertical_alignment": vertical_alignment,
+                        "wrap_text": wrap_text,
+                        "number_format": number_format
+                    }.items() if v is not None
+                },
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "range": range_address,
-            "formatting_applied": {
-                k: v for k, v in {
-                    "horizontal_alignment": horizontal_alignment,
-                    "vertical_alignment": vertical_alignment,
-                    "wrap_text": wrap_text,
-                    "number_format": number_format
-                }.items() if v is not None
-            }
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set cell format.", str(e))
 
 
 @tool
@@ -783,34 +696,28 @@ def excel_set_border_format(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.set_border_format(
+                manager, workbook, worksheet_name, range_address,
+                edge, style, weight, color
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.set_border_format(
-            manager, workbook, worksheet_name, range_address,
-            edge, style, weight, color
+        return _ok(
+            "Border format applied.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "range": range_address,
+                "border_applied": {
+                    "edge": edge,
+                    "style": style,
+                    "weight": weight,
+                    "color": color
+                },
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "range": range_address,
-            "border_applied": {
-                "edge": edge,
-                "style": style,
-                "weight": weight,
-                "color": color
-            }
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set border format.", str(e))
 
 
 @tool
@@ -832,28 +739,22 @@ def excel_set_background_color(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.set_background_color(
+                manager, workbook, worksheet_name, range_address, color
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.set_background_color(
-            manager, workbook, worksheet_name, range_address, color
+        return _ok(
+            "Background color applied.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "range": range_address,
+                "background_color": color,
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "range": range_address,
-            "background_color": color,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set background color.", str(e))
 
 
 # =============================================================================
@@ -879,28 +780,22 @@ def excel_set_formula(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formula_ops.set_formula(
+                manager, workbook, worksheet_name, range_address, formula
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formula_ops.set_formula(
-            manager, workbook, worksheet_name, range_address, formula
+        return _ok(
+            "Formula set.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "cell": range_address,
+                "formula": formula,
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "cell": range_address,
-            "formula": formula,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set formula.", str(e))
 
 
 @tool
@@ -920,32 +815,24 @@ def excel_get_formula(
         JSON string with the formula or a message if the cell contains a value.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=True, save_on_close=False) as (manager, workbook, path):
+            formula = formula_ops.get_formula(
+                manager, workbook, worksheet_name, range_address
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formula = formula_ops.get_formula(
-            manager, workbook, worksheet_name, range_address
-        )
-
-        # Check if it's actually a formula or just a value
         is_formula = formula.startswith("=") if formula else False
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "cell": range_address,
-            "formula": formula,
-            "is_formula": is_formula,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return _ok(
+            "Formula retrieved.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "cell": range_address,
+                "formula": formula,
+                "is_formula": is_formula,
+            },
+        )
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to get formula.", str(e))
 
 
 # =============================================================================
@@ -969,27 +856,21 @@ def excel_auto_fit_columns(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.auto_fit_columns(
+                manager, workbook, worksheet_name, range_address
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.auto_fit_columns(
-            manager, workbook, worksheet_name, range_address
+        return _ok(
+            "Columns auto-fitted.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "columns_auto_fitted": range_address if range_address else "all used columns",
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "columns_auto_fitted": range_address if range_address else "all used columns",
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to auto-fit columns.", str(e))
 
 
 @tool
@@ -1011,28 +892,22 @@ def excel_set_column_width(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.set_column_width(
+                manager, workbook, worksheet_name, columns, width
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.set_column_width(
-            manager, workbook, worksheet_name, columns, width
+        return _ok(
+            "Column width set.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "columns": columns,
+                "width": width,
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "columns": columns,
-            "width": width,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set column width.", str(e))
 
 
 @tool
@@ -1054,28 +929,22 @@ def excel_set_row_height(
         JSON string with operation result.
     """
     try:
-        manager = get_excel_manager()
-        manager.start()
+        with workbook_context(filepath, read_only=False, save_on_close=True) as (manager, workbook, path):
+            formatting_ops.set_row_height(
+                manager, workbook, worksheet_name, rows, height
+            )
 
-        workbook = manager.get_workbook(normalize_filepath(filepath))
-        formatting_ops.set_row_height(
-            manager, workbook, worksheet_name, rows, height
+        return _ok(
+            "Row height set.",
+            {
+                "workbook_path": path,
+                "worksheet": worksheet_name,
+                "rows": rows,
+                "height": height,
+            },
         )
-
-        result = {
-            "success": True,
-            "workbook_path": filepath,
-            "worksheet": worksheet_name,
-            "rows": rows,
-            "height": height,
-        }
-
-        return json.dumps(result, indent=2, ensure_ascii=False)
-
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _err("Failed to set row height.", str(e))
 
 
 # =============================================================================
@@ -1086,11 +955,9 @@ EXCEL_TOOLS = [
     # Status
     excel_status,
     # Workbook
-    excel_open_workbook,
     excel_create_workbook,
     excel_list_worksheets,
     excel_save_workbook,
-    excel_close_workbook,
     # Range
     excel_read_range,
     excel_write_range,

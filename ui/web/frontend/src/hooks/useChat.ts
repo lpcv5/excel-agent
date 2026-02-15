@@ -33,7 +33,6 @@ function generateId(): string {
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [currentAssistantMessage, setCurrentAssistantMessage] = useState<Message | null>(null)
-  const [currentToolCall, setCurrentToolCall] = useState<ToolCall | null>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
 
   const { isReady, isStreaming, error, sendQuery, newSession, clearError } = usePywebviewChat()
@@ -47,6 +46,43 @@ export function useChat() {
   useAgentEvent((event: AgentEvent) => {
     handleEvent(event)
   })
+
+  const upsertToolCall = useCallback((toolCalls: ToolCall[], toolCall: ToolCall) => {
+    const index = toolCalls.findIndex(tc => tc.id === toolCall.id)
+    if (index >= 0) {
+      const updated = [...toolCalls]
+      updated[index] = { ...updated[index], ...toolCall }
+      return updated
+    }
+    return [...toolCalls, toolCall]
+  }, [])
+
+  const updateToolCallById = useCallback(
+    (toolCalls: ToolCall[], id: string, updater: (toolCall: ToolCall) => ToolCall) => {
+      const index = toolCalls.findIndex(tc => tc.id === id)
+      if (index >= 0) {
+        const updated = [...toolCalls]
+        updated[index] = updater(updated[index])
+        return updated
+      }
+      return toolCalls
+    },
+    []
+  )
+
+  const updateLastRunningByName = useCallback(
+    (toolCalls: ToolCall[], name: string, updater: (toolCall: ToolCall) => ToolCall) => {
+      for (let i = toolCalls.length - 1; i >= 0; i -= 1) {
+        if (toolCalls[i].name === name && toolCalls[i].status === 'running') {
+          const updated = [...toolCalls]
+          updated[i] = updater(updated[i])
+          return updated
+        }
+      }
+      return toolCalls
+    },
+    []
+  )
 
   const handleEvent = useCallback((event: AgentEvent) => {
     switch (event.type) {
@@ -68,17 +104,8 @@ export function useChat() {
       case 'query_end': {
         // Finalize the current assistant message
         if (currentAssistantMessage) {
-          // Append any pending tool call
-          let finalMessage = currentAssistantMessage
-          if (currentToolCall && currentToolCall.status !== 'pending') {
-            finalMessage = {
-              ...finalMessage,
-              toolCalls: [...(finalMessage.toolCalls || []), currentToolCall],
-            }
-          }
-          setMessages((prev) => [...prev, { ...finalMessage, isStreaming: false }])
+          setMessages((prev) => [...prev, { ...currentAssistantMessage, isStreaming: false }])
           setCurrentAssistantMessage(null)
-          setCurrentToolCall(null)
         }
         break
       }
@@ -111,68 +138,88 @@ export function useChat() {
 
       case 'text': {
         if (currentAssistantMessage) {
-          // Finalize any pending tool call before adding text
-          if (currentToolCall) {
-            setCurrentAssistantMessage((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    content: prev.content + (event.content || ''),
-                    toolCalls: [...(prev.toolCalls || []), currentToolCall],
-                  }
-                : null
-            )
-            setCurrentToolCall(null)
-          } else {
-            setCurrentAssistantMessage((prev) =>
-              prev
-                ? { ...prev, content: prev.content + (event.content || '') }
-                : null
-            )
-          }
+          setCurrentAssistantMessage((prev) =>
+            prev
+              ? { ...prev, content: prev.content + (event.content || '') }
+              : null
+          )
         }
         break
       }
 
       case 'tool_call_start': {
-        // Finalize previous tool call if any
-        if (currentToolCall && currentAssistantMessage) {
+        if (currentAssistantMessage) {
+          const id = event.tool_call_id || generateId()
+          const toolCall: ToolCall = {
+            id,
+            name: event.tool_name || 'unknown',
+            args: event.tool_args || '',
+            status: 'running',
+          }
           setCurrentAssistantMessage((prev) =>
             prev
               ? {
                   ...prev,
-                  toolCalls: [...(prev.toolCalls || []), currentToolCall],
+                  toolCalls: upsertToolCall(prev.toolCalls || [], toolCall),
                 }
               : null
           )
         }
-        // Start a new tool call
-        setCurrentToolCall({
-          id: generateId(),
-          name: event.tool_name || 'unknown',
-          args: event.tool_args || '',
-          status: 'running',
-        })
         break
       }
 
       case 'tool_call_args': {
-        if (currentToolCall) {
-          setCurrentToolCall((prev) =>
-            prev ? { ...prev, args: prev.args + (event.content || '') } : null
+        if (currentAssistantMessage) {
+          setCurrentAssistantMessage((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  toolCalls: event.tool_call_id
+                    ? updateToolCallById(
+                        prev.toolCalls || [],
+                        event.tool_call_id,
+                        (tc) => ({ ...tc, args: tc.args + (event.content || '') })
+                      )
+                    : updateLastRunningByName(
+                        prev.toolCalls || [],
+                        event.tool_name || 'unknown',
+                        (tc) => ({ ...tc, args: tc.args + (event.content || '') })
+                      ),
+                }
+              : null
           )
         }
         break
       }
 
       case 'tool_result': {
-        if (currentToolCall) {
-          setCurrentToolCall((prev) =>
+        if (currentAssistantMessage) {
+          const status = ((event.data as { status?: string } | null)?.status === 'error')
+            ? 'error'
+            : 'completed'
+          setCurrentAssistantMessage((prev) =>
             prev
               ? {
                   ...prev,
-                  result: event.content || '',
-                  status: 'completed',
+                  toolCalls: event.tool_call_id
+                    ? updateToolCallById(
+                        prev.toolCalls || [],
+                        event.tool_call_id,
+                        (tc) => ({
+                          ...tc,
+                          result: event.content || '',
+                          status,
+                        })
+                      )
+                    : updateLastRunningByName(
+                        prev.toolCalls || [],
+                        event.tool_name || 'unknown',
+                        (tc) => ({
+                          ...tc,
+                          result: event.content || '',
+                          status,
+                        })
+                      ),
                 }
               : null
           )
@@ -180,7 +227,7 @@ export function useChat() {
         break
       }
     }
-  }, [currentAssistantMessage, currentToolCall])
+  }, [currentAssistantMessage, updateLastRunningByName, updateToolCallById, upsertToolCall])
 
   const addUserMessage = useCallback((content: string) => {
     const message: Message = {
@@ -206,7 +253,6 @@ export function useChat() {
     await newSession()
     setMessages([])
     setCurrentAssistantMessage(null)
-    setCurrentToolCall(null)
   }, [newSession])
 
   // Get all messages including the current streaming one
