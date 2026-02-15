@@ -98,7 +98,8 @@ def open_workbook(
 def close_workbook(
     manager: ExcelAppManager,
     filepath: str,
-    save: bool = True
+    save: bool = True,
+    force: bool = True
 ) -> None:
     """Close an open workbook.
 
@@ -106,8 +107,9 @@ def close_workbook(
         manager: ExcelAppManager instance
         filepath: Path to the workbook
         save: Whether to save changes before closing
+        force: If True, close even if we don't own the workbook (default: True)
     """
-    manager.close_workbook(filepath, save)
+    manager.close_workbook(filepath, save, force=force)
 
 
 def save_workbook(
