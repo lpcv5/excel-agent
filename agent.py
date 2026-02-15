@@ -30,14 +30,41 @@ Examples:
   # Web UI mode
   uv run python agent.py --web
 
-  # With specific model
-  uv run python agent.py --model openai:gpt-4 "Analyze data.xlsx"
+  # With Zhipu GLM (default)
+  uv run python agent.py --model zhipu:glm-5 "Analyze data.xlsx"
+
+  # With OpenAI
+  uv run python agent.py --model openai:gpt-4o "Analyze data.xlsx"
+
+  # With DeepSeek
+  uv run python agent.py --model deepseek:deepseek-chat "Analyze data.xlsx"
+
+  # With Moonshot
+  uv run python agent.py --model moonshot:moonshot-v1-8k "Analyze data.xlsx"
+
+  # With custom provider (requires CUSTOM_API_KEY and CUSTOM_API_BASE env vars)
+  uv run python agent.py --model custom:my-model "Analyze data.xlsx"
 
   # With LLM call logging (for debugging)
   uv run python agent.py --log-level DEBUG "Read data.xlsx"
 
   # With logging to file
   uv run python agent.py --log-level DEBUG --log-file logs/llm.log "Analyze data.xlsx"
+
+Supported Providers:
+  zhipu     - Zhipu GLM (glm-5, glm-4, etc.)
+  openai    - OpenAI (gpt-4o, gpt-4o-mini, etc.)
+  deepseek  - DeepSeek (deepseek-chat, deepseek-reasoner, etc.)
+  moonshot  - Moonshot Kimi (moonshot-v1-8k, moonshot-v1-32k, etc.)
+  custom    - Custom OpenAI-compatible API
+
+Environment Variables:
+  ZAI_API_KEY       - API key for Zhipu GLM (default provider)
+  OPENAI_API_KEY    - API key for OpenAI
+  DEEPSEEK_API_KEY  - API key for DeepSeek
+  MOONSHOT_API_KEY  - API key for Moonshot
+  CUSTOM_API_KEY    - API key for custom provider
+  CUSTOM_API_BASE   - API base URL for custom provider
         """,
     )
 
@@ -59,8 +86,8 @@ Examples:
     parser.add_argument(
         "--model",
         "-m",
-        default="openai:gpt-5-mini",
-        help="LLM model to use (default: openai:gpt-5-mini)",
+        default="zhipu:glm-5",
+        help="LLM model to use, format: provider:model (default: zhipu:glm-5)",
     )
 
     # Directory option

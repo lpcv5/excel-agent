@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Literal, Optional
 import uuid
 
+from langchain_core.language_models import BaseChatModel
+
 
 @dataclass
 class LoggingConfig:
@@ -38,7 +40,8 @@ class AgentConfig:
     """Configuration for Excel Agent.
 
     Attributes:
-        model: LLM model to use (e.g., "openai:gpt-5-mini")
+        model: LLM model to use (e.g., "zhipu:glm-5", "openai:gpt-4o")
+               Can also be a BaseChatModel instance for custom configuration.
         working_dir: Working directory for file operations
         agents_md_path: Path to AGENTS.md memory file
         skills_path: Path to skills directory
@@ -49,8 +52,8 @@ class AgentConfig:
         logging: LLM call logging configuration
     """
 
-    # Model settings
-    model: str = "openai:gpt-5-mini"
+    # Model settings - can be string or BaseChatModel instance
+    model: str | BaseChatModel = "zhipu:glm-5"
 
     # Paths
     working_dir: Path = field(default_factory=Path.cwd)
@@ -100,7 +103,17 @@ class AgentConfig:
         )
 
         return cls(
-            model=getattr(args, "model", "openai:gpt-5-mini"),
+            model=getattr(args, "model", "zhipu:glm-5"),
             working_dir=Path(args.dir) if getattr(args, "dir", None) else Path.cwd(),
             logging=logging_config,
         )
+
+    def get_model_instance(self) -> BaseChatModel:
+        """Create and return the appropriate LLM instance based on model config.
+
+        Returns:
+            BaseChatModel instance configured for the specified provider
+        """
+        from excel_agent.model_provider import create_model
+
+        return create_model(self.model)

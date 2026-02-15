@@ -14,6 +14,12 @@ export type EventType =
   | 'tool_call_args'
   | 'tool_call_end'
   | 'tool_result'
+  | 'todo_update'
+
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
 
 export interface AgentEvent {
   type: EventType
@@ -24,6 +30,7 @@ export interface AgentEvent {
   tool_call_id: string | null
   error_message: string | null
   data: Record<string, unknown>
+  todos: TodoItem[] | null
 }
 
 // Type guards for event types
@@ -61,4 +68,8 @@ export function isToolCallArgsEvent(event: AgentEvent): event is AgentEvent {
 
 export function isToolResultEvent(event: AgentEvent): event is AgentEvent {
   return event.type === 'tool_result'
+}
+
+export function isTodoUpdateEvent(event: AgentEvent): event is AgentEvent {
+  return event.type === 'todo_update'
 }

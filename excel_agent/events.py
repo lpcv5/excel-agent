@@ -34,6 +34,7 @@ __all__ = [
     "ErrorEvent",
     "QueryStartEvent",
     "QueryEndEvent",
+    "TodoUpdateEvent",
 ]
 
 
@@ -56,6 +57,9 @@ class EventType(Enum):
     TOOL_CALL_END = "tool_call_end"
     TOOL_RESULT = "tool_result"
 
+    # Todo events
+    TODO_UPDATE = "todo_update"
+
 
 @dataclass
 class AgentEvent:
@@ -69,6 +73,7 @@ class AgentEvent:
     tool_args: Optional[str] = None
     tool_call_id: Optional[str] = None
     error_message: Optional[str] = None
+    todos: Optional[list[dict]] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert event to dictionary for serialization."""
@@ -81,6 +86,7 @@ class AgentEvent:
             "tool_call_id": self.tool_call_id,
             "error_message": self.error_message,
             "data": self.data,
+            "todos": self.todos,
         }
 
 
@@ -156,3 +162,11 @@ class QueryEndEvent(AgentEvent):
     """Query completed event."""
 
     type: EventType = EventType.QUERY_END
+
+
+@dataclass
+class TodoUpdateEvent(AgentEvent):
+    """Todo list update event from write_todos tool."""
+
+    type: EventType = EventType.TODO_UPDATE
+    todos: list[dict] = field(default_factory=list)

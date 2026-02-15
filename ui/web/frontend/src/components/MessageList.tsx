@@ -6,10 +6,11 @@ import type { Message } from '@/hooks/useChat'
 interface MessageListProps {
   messages: Message[]
   messageEndRef: React.RefObject<HTMLDivElement | null>
+  viewportRef?: React.RefCallback<HTMLDivElement> | React.Ref<HTMLDivElement>
   onExampleClick?: (text: string) => void
 }
 
-export function MessageList({ messages, messageEndRef, onExampleClick }: MessageListProps) {
+export function MessageList({ messages, messageEndRef, viewportRef, onExampleClick }: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -27,7 +28,7 @@ export function MessageList({ messages, messageEndRef, onExampleClick }: Message
   }
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full" viewportRef={viewportRef}>
       <div className="flex min-w-0 flex-col gap-4 p-4">
         {messages.map((message) => (
           <MessageItem key={message.id} message={message} />

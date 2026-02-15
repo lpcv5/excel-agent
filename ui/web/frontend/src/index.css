@@ -1,78 +1,131 @@
 @import "tailwindcss";
 
-/* Custom base styles */
+@theme inline {
+  /* Base Colors */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Semantic Status Colors */
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  /* Radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-  --radius: 0.5rem;
+  /* 中国传统翡翠色系 - Light Mode */
+  --background: oklch(0.98 0.005 155);
+  --foreground: oklch(0.25 0.02 155);
+  --card: oklch(0.99 0.01 100);
+  --card-foreground: oklch(0.25 0.02 155);
+  --popover: oklch(0.99 0.01 100);
+  --popover-foreground: oklch(0.25 0.02 155);
+  --primary: oklch(0.72 0.14 160);
+  --primary-foreground: oklch(0.98 0.01 160);
+  --secondary: oklch(0.95 0.02 155);
+  --secondary-foreground: oklch(0.30 0.03 155);
+  --muted: oklch(0.95 0.02 155);
+  --muted-foreground: oklch(0.50 0.02 155);
+  --accent: oklch(0.55 0.10 60);
+  --accent-foreground: oklch(0.98 0.01 100);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 100);
+  --border: oklch(0.90 0.02 155);
+  --input: oklch(0.90 0.02 155);
+  --ring: oklch(0.72 0.14 160);
+  --radius: 0.65rem;
+
+  /* Semantic Status Colors - Light Mode */
+  --info: oklch(0.65 0.15 220);
+  --info-foreground: oklch(0.98 0.01 100);
+  --success: oklch(0.78 0.14 145);
+  --success-foreground: oklch(0.20 0.02 145);
+  --warning: oklch(0.80 0.15 80);
+  --warning-foreground: oklch(0.25 0.02 80);
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
+  /* 中国传统翡翠色系 - Dark Mode */
+  --background: oklch(0.18 0.02 160);
+  --foreground: oklch(0.95 0.01 155);
+  --card: oklch(0.22 0.02 160);
+  --card-foreground: oklch(0.95 0.01 155);
+  --popover: oklch(0.22 0.02 160);
+  --popover-foreground: oklch(0.95 0.01 155);
+  --primary: oklch(0.72 0.14 160);
+  --primary-foreground: oklch(0.18 0.02 160);
+  --secondary: oklch(0.28 0.02 160);
+  --secondary-foreground: oklch(0.95 0.01 155);
+  --muted: oklch(0.28 0.02 160);
+  --muted-foreground: oklch(0.65 0.02 160);
+  --accent: oklch(0.55 0.10 60);
+  --accent-foreground: oklch(0.95 0.01 155);
+  --destructive: oklch(0.65 0.18 25);
+  --destructive-foreground: oklch(0.98 0.01 100);
+  --border: oklch(0.30 0.02 160);
+  --input: oklch(0.30 0.02 160);
+  --ring: oklch(0.72 0.14 160);
+
+  /* Semantic Status Colors - Dark Mode */
+  --info: oklch(0.65 0.15 220);
+  --info-foreground: oklch(0.98 0.01 100);
+  --success: oklch(0.72 0.14 145);
+  --success-foreground: oklch(0.18 0.02 145);
+  --warning: oklch(0.75 0.15 80);
+  --warning-foreground: oklch(0.20 0.02 80);
 }
 
 * {
-  border-color: hsl(var(--border));
+  border-color: var(--border);
 }
 
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: var(--background);
+  color: var(--foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
 }
 
-/* Custom scrollbar */
+/* Scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: var(--muted-foreground);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: var(--foreground);
 }
