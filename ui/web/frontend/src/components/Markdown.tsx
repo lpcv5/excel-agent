@@ -26,12 +26,12 @@ export function Markdown({ content }: MarkdownProps) {
           </a>
         ),
         code: ({ children }) => (
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+          <code className="break-words rounded bg-muted px-1.5 py-0.5 text-xs">
             {children}
           </code>
         ),
         pre: ({ children }) => (
-          <pre className="max-w-full overflow-x-auto rounded bg-muted p-2 text-xs">
+          <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted p-2 text-xs">
             {children}
           </pre>
         ),

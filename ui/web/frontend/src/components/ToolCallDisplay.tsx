@@ -16,7 +16,7 @@ export function ToolCallDisplay({ toolCall, isStreaming }: ToolCallDisplayProps)
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg border bg-muted/50 p-3 text-sm">
+    <div className="flex min-w-0 flex-col gap-1 rounded-lg border bg-muted/50 p-3 text-sm">
       <div className="flex items-center gap-2">
         {isRunning ? (
           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -54,15 +54,15 @@ export function ToolCallDisplay({ toolCall, isStreaming }: ToolCallDisplayProps)
       {expanded && (
         <>
           {toolCall.args && toolCall.args !== '{}' && (
-            <pre className="mt-2 max-w-full overflow-x-auto rounded bg-background/50 p-2 text-xs text-muted-foreground">
+            <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-background/50 p-2 text-xs text-muted-foreground">
               {formatArgs(toolCall.args)}
             </pre>
           )}
 
           {toolCall.result && (
-            <div className="mt-2 max-w-full">
+            <div className="mt-2 min-w-0 max-w-full">
               <span className="text-xs font-medium text-muted-foreground">Result:</span>
-              <pre className="mt-1 max-h-32 max-w-full overflow-auto rounded bg-background/50 p-2 text-xs text-muted-foreground">
+              <pre className="mt-1 max-h-32 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-background/50 p-2 text-xs text-muted-foreground">
                 {truncateResult(toolCall.result, 500)}
               </pre>
             </div>
@@ -103,7 +103,7 @@ export function ToolCallList({ toolCalls, isStreaming }: ToolCallListProps) {
   if (toolCalls.length === 0) return null
 
   return (
-    <div className="mt-2 flex flex-col gap-2">
+    <div className="mt-2 flex min-w-0 flex-col gap-2">
       {toolCalls.map((toolCall, index) => (
         <ToolCallDisplay
           key={toolCall.id || index}

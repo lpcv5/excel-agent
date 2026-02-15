@@ -203,7 +203,7 @@ export function ChatPanel() {
       </Dialog>
 
       {/* Messages */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-w-0 flex-1 overflow-hidden">
         <MessageList
           messages={messages}
           messageEndRef={messageEndRef}

@@ -79,7 +79,7 @@ export function MessageItem({ message }: MessageItemProps) {
       {/* Content Card */}
       <div
         className={cn(
-          'relative flex w-fit max-w-[85%] flex-col overflow-hidden rounded-xl border bg-card',
+          'relative flex min-w-0 max-w-[85%] flex-col overflow-hidden rounded-xl border bg-card',
           isUser ? 'items-end' : 'items-start'
         )}
       >
@@ -123,7 +123,7 @@ export function MessageItem({ message }: MessageItemProps) {
         )}
 
         {/* Card Content */}
-        <div className="flex max-w-full flex-col gap-2 p-3">
+        <div className="flex min-w-0 max-w-full flex-col gap-2 p-3">
           {/* Thinking */}
           {!isUser && message.thinking && (
             <Alert variant="warning" className="p-3">
