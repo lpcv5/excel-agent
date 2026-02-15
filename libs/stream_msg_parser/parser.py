@@ -191,8 +191,7 @@ class MessageParser:
                 self._tool_start_times[tool_id] = time.perf_counter()
                 events.append(ToolCallStartEvent(
                     id=tool_id,
-                    name=tool_name,
-                    args={},  # Args will come in chunks
+                    name=tool_name
                 ))
 
         # If we have args chunk, emit ToolCallArgsEvent

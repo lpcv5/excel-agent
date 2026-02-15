@@ -34,6 +34,7 @@ from excel_agent.events import (
     ToolCallArgsEvent,
     ToolCallStartEvent,
     ToolResultEvent,
+    TodoUpdateEvent,
 )
 
 
@@ -67,6 +68,7 @@ class AgentCore:
         self._agent: Optional[CompiledStateGraph] = None
         self._parser = MessageParser(track_tool_lifecycle=True)
         self._tool_args_buffer: dict[str, str] = {}  # Buffer for accumulating tool args
+        self._todo_args_cache: dict[str, str] = {}  # Track last emitted todos per tool call
         self._logger: Optional[logging.Logger] = self._setup_logger()
 
     def _setup_logger(self) -> Optional[logging.Logger]:
@@ -164,8 +166,11 @@ Your working directory is: `{working_dir_str}`
 Use absolute Windows paths under this directory when working with files.
 """
 
+        # Get the model instance (handles different providers)
+        model = self.config.get_model_instance()
+
         return create_deep_agent(
-            model=self.config.model,
+            model=model,
             tools=EXCEL_TOOLS,
             system_prompt=system_prompt,
             memory=memory_paths,
@@ -214,8 +219,8 @@ Use absolute Windows paths under this directory when working with files.
                 self._log_stream_event(parser_event, elapsed)
 
                 # Convert parser events to our event types
-                event = self._convert_event(parser_event)
-                if event:
+                events = self._convert_event(parser_event)
+                for event in events:
                     yield event
 
             # Yield query end event
@@ -224,8 +229,25 @@ Use absolute Windows paths under this directory when working with files.
         except Exception as e:
             yield ErrorEvent(error_message=str(e))
 
-    def _convert_event(self, parser_event: StreamEvent) -> Optional[AgentEvent]:
-        """Convert langgraph-stream-parser event to our event type."""
+    def _extract_todos_from_args(self, args_text: str) -> Optional[list[dict]]:
+        """Parse todos list from a JSON tool args string."""
+        if not args_text:
+            return None
+        try:
+            import json as json_mod
+            parsed = json_mod.loads(args_text)
+        except Exception:
+            return None
+
+        if isinstance(parsed, dict):
+            todos = parsed.get("todos")
+            if isinstance(todos, list):
+                return todos
+        return None
+
+    def _convert_event(self, parser_event: StreamEvent) -> list[AgentEvent]:
+        """Convert langgraph-stream-parser event to our event types."""
+        events: list[AgentEvent] = []
         if isinstance(parser_event, ParserContentEvent):
             content = parser_event.content
 
@@ -242,46 +264,77 @@ Use absolute Windows paths under this directory when working with files.
                         if extracted and extracted.strip():
                             content = extracted
                         else:
-                            return None  # Skip reasoning-only content
+                            return events  # Skip reasoning-only content
                     else:
-                        return None  # Can't parse, skip
+                        return events  # Can't parse, skip
 
             # Skip content that is just tool call arguments dict
             # Format: {'arguments': '...', 'call_id': '...', 'name': '...'}
             if isinstance(content, str) and content.startswith("{'arguments':"):
-                return None
+                return events
 
             # Skip empty content (but preserve whitespace/newlines)
             if not content:
-                return None
+                return events
 
             # Check for thinking/reasoning content
             if hasattr(parser_event, "node") and parser_event.node == "thinking":
-                return ThinkingEvent(content=content)
-            return TextEvent(content=content)
+                events.append(ThinkingEvent(content=content))
+            else:
+                events.append(TextEvent(content=content))
+            return events
 
         elif isinstance(parser_event, ParserToolCallStartEvent):
             import json as json_mod
-            return ToolCallStartEvent(
+            tool_args = ""
+            # Only serialize args if it's a non-empty dict
+            if parser_event.args and isinstance(parser_event.args, dict) and len(parser_event.args) > 0:
+                try:
+                    tool_args = json_mod.dumps(parser_event.args)
+                except Exception:
+                    tool_args = ""
+            events.append(ToolCallStartEvent(
                 tool_name=parser_event.name,
-                tool_args=json_mod.dumps(parser_event.args),
+                tool_args=tool_args,
                 tool_call_id=getattr(parser_event, "id", None),
-            )
+            ))
+
+            if parser_event.name == "write_todos" and isinstance(parser_event.args, dict):
+                todos = parser_event.args.get("todos")
+                if isinstance(todos, list):
+                    events.append(TodoUpdateEvent(todos=todos))
+
+            return events
 
         elif isinstance(parser_event, ParserToolCallArgsEvent):
             # Tool call args chunk - emit with the partial args
-            import json as json_mod
             # Accumulate the args
             existing_args = getattr(self, '_tool_args_buffer', {})
             tool_id = parser_event.id
             if tool_id:
                 existing_args[tool_id] = existing_args.get(tool_id, '') + parser_event.args
                 self._tool_args_buffer = existing_args
-            return ToolCallArgsEvent(
+            events.append(ToolCallArgsEvent(
                 tool_name=parser_event.name,
                 content=parser_event.args,
                 tool_call_id=getattr(parser_event, "id", None),
-            )
+            ))
+
+            if parser_event.name == "write_todos":
+                buffer_key = tool_id or f"name:{parser_event.name}"
+                if tool_id:
+                    combined_args = existing_args.get(tool_id, "")
+                else:
+                    combined_args = parser_event.args or ""
+                todos = self._extract_todos_from_args(combined_args)
+                if todos is not None:
+                    import json as json_mod_inner
+                    todos_key = json_mod_inner.dumps(todos, sort_keys=True)
+                    if self._todo_args_cache.get(buffer_key) != todos_key:
+                        self._todo_args_cache[buffer_key] = todos_key
+                        events.append(TodoUpdateEvent(todos=todos))
+
+            return events
 
         elif isinstance(parser_event, ToolCallEndEvent):
             # Tool completed - emit result event (including error status)
@@ -290,21 +343,42 @@ Use absolute Windows paths under this directory when working with files.
                 content = parser_event.error_message or "Tool call failed"
             else:
                 content = str(parser_event.result)[:1000] if parser_event.result else ""
-            return ToolResultEvent(
+            events.append(ToolResultEvent(
                 tool_name=parser_event.name,
                 content=content,
                 tool_call_id=getattr(parser_event, "id", None),
                 data={"status": parser_event.status, "duration_ms": parser_event.duration_ms}
-            )
+            ))
+
+            if parser_event.name == "write_todos":
+                tool_id = getattr(parser_event, "id", None)
+                buffer_key = tool_id or f"name:{parser_event.name}"
+                combined_args = ""
+                if tool_id and tool_id in self._tool_args_buffer:
+                    combined_args = self._tool_args_buffer.get(tool_id, "")
+                todos = self._extract_todos_from_args(combined_args)
+                if todos is not None:
+                    import json as json_mod_inner
+                    todos_key = json_mod_inner.dumps(todos, sort_keys=True)
+                    if self._todo_args_cache.get(buffer_key) != todos_key:
+                        self._todo_args_cache[buffer_key] = todos_key
+                        events.append(TodoUpdateEvent(todos=todos))
+
+                if tool_id:
+                    self._tool_args_buffer.pop(tool_id, None)
+                self._todo_args_cache.pop(buffer_key, None)
+
+            return events
 
         elif isinstance(parser_event, ParserErrorEvent):
-            return ErrorEvent(error_message=parser_event.error)
+            events.append(ErrorEvent(error_message=parser_event.error))
+            return events
 
         elif isinstance(parser_event, CompleteEvent):
             # Stream completed - handled by QueryEndEvent
-            return None
+            return events
 
-        return None
+        return events
 
     def invoke(
         self,

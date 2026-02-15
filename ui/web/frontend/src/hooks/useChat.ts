@@ -1,15 +1,30 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { AgentEvent } from '@/types/events'
+import type { AgentEvent, TodoItem } from '@/types/events'
 import { usePywebviewChat, useAgentEvent } from './usePywebview'
+
+// Message content block types - supports chronological ordering
+export type ContentBlockType = 'text' | 'thinking' | 'tool_call'
+
+export interface ContentBlock {
+  id: string
+  type: ContentBlockType
+  timestamp: number
+  // For text/thinking
+  content?: string
+  // For tool_call
+  toolCall?: ToolCall
+}
 
 export interface Message {
   id: string
   role: 'user' | 'assistant'
-  content: string
+  content: string // Keep for user messages
   timestamp: Date
   isStreaming?: boolean
-  thinking?: string
-  toolCalls?: ToolCall[]
+  // For assistant messages - chronological content blocks
+  blocks?: ContentBlock[]
+  // Track running tool calls for updates
+  toolCallMap?: Map<string, ToolCall>
 }
 
 export interface ToolCall {
@@ -33,77 +48,66 @@ function generateId(): string {
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [currentAssistantMessage, setCurrentAssistantMessage] = useState<Message | null>(null)
+  const [todos, setTodos] = useState<TodoItem[]>([])
   const messageEndRef = useRef<HTMLDivElement>(null)
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null)
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
+  const scrollHandlerRef = useRef<(() => void) | null>(null)
 
   const { isReady, isStreaming, error, sendQuery, newSession, clearError } = usePywebviewChat()
 
-  // Auto-scroll to bottom
+  // Set up scroll tracking using callback ref
+  const setScrollViewportRef = useCallback((node: HTMLDivElement | null) => {
+    // Clean up previous listener
+    if (scrollHandlerRef.current && scrollViewportRef.current) {
+      scrollViewportRef.current.removeEventListener('scroll', scrollHandlerRef.current)
+    }
+
+    scrollViewportRef.current = node
+
+    if (node) {
+      const handleScroll = () => {
+        const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
+        setIsUserAtBottom(distanceFromBottom < 80)
+      }
+
+      scrollHandlerRef.current = handleScroll
+      handleScroll() // Initial check
+      node.addEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  // Auto-scroll to bottom only if user is already near bottom
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, currentAssistantMessage])
+    if (isUserAtBottom) {
+      messageEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, currentAssistantMessage, isUserAtBottom])
 
   // Handle agent events
   useAgentEvent((event: AgentEvent) => {
     handleEvent(event)
   })
 
-  const upsertToolCall = useCallback((toolCalls: ToolCall[], toolCall: ToolCall) => {
-    const index = toolCalls.findIndex(tc => tc.id === toolCall.id)
-    if (index >= 0) {
-      const updated = [...toolCalls]
-      updated[index] = { ...updated[index], ...toolCall }
-      return updated
-    }
-    return [...toolCalls, toolCall]
-  }, [])
-
-  const updateToolCallById = useCallback(
-    (toolCalls: ToolCall[], id: string, updater: (toolCall: ToolCall) => ToolCall) => {
-      const index = toolCalls.findIndex(tc => tc.id === id)
-      if (index >= 0) {
-        const updated = [...toolCalls]
-        updated[index] = updater(updated[index])
-        return updated
-      }
-      return toolCalls
-    },
-    []
-  )
-
-  const updateLastRunningByName = useCallback(
-    (toolCalls: ToolCall[], name: string, updater: (toolCall: ToolCall) => ToolCall) => {
-      for (let i = toolCalls.length - 1; i >= 0; i -= 1) {
-        if (toolCalls[i].name === name && toolCalls[i].status === 'running') {
-          const updated = [...toolCalls]
-          updated[i] = updater(updated[i])
-          return updated
-        }
-      }
-      return toolCalls
-    },
-    []
-  )
-
   const handleEvent = useCallback((event: AgentEvent) => {
     switch (event.type) {
       case 'query_start': {
-        // User message is added when sending
-        // Start a new assistant message
+        // Start a new assistant message with chronological blocks
         setCurrentAssistantMessage({
           id: generateId(),
           role: 'assistant',
           content: '',
           timestamp: new Date(),
           isStreaming: true,
-          thinking: '',
-          toolCalls: [],
+          blocks: [],
+          toolCallMap: new Map(),
         })
         break
       }
 
       case 'query_end': {
-        // Finalize the current assistant message
         if (currentAssistantMessage) {
+          // Finalize - convert toolCallMap to final form
           setMessages((prev) => [...prev, { ...currentAssistantMessage, isStreaming: false }])
           setCurrentAssistantMessage(null)
         }
@@ -127,22 +131,58 @@ export function useChat() {
 
       case 'thinking': {
         if (currentAssistantMessage) {
-          setCurrentAssistantMessage((prev) =>
-            prev
-              ? { ...prev, thinking: (prev.thinking || '') + (event.content || '') }
-              : null
-          )
+          setCurrentAssistantMessage((prev) => {
+            if (!prev) return null
+            const blocks = prev.blocks || []
+            // Append to last thinking block or create new one
+            const lastBlock = blocks[blocks.length - 1]
+            if (lastBlock?.type === 'thinking') {
+              const updatedBlocks = [...blocks]
+              updatedBlocks[updatedBlocks.length - 1] = {
+                ...lastBlock,
+                content: (lastBlock.content || '') + (event.content || ''),
+              }
+              return { ...prev, blocks: updatedBlocks }
+            }
+            return {
+              ...prev,
+              blocks: [...blocks, {
+                id: generateId(),
+                type: 'thinking',
+                timestamp: Date.now(),
+                content: event.content || '',
+              }],
+            }
+          })
         }
         break
       }
 
       case 'text': {
         if (currentAssistantMessage) {
-          setCurrentAssistantMessage((prev) =>
-            prev
-              ? { ...prev, content: prev.content + (event.content || '') }
-              : null
-          )
+          setCurrentAssistantMessage((prev) => {
+            if (!prev) return null
+            const blocks = prev.blocks || []
+            // Append to last text block or create new one
+            const lastBlock = blocks[blocks.length - 1]
+            if (lastBlock?.type === 'text') {
+              const updatedBlocks = [...blocks]
+              updatedBlocks[updatedBlocks.length - 1] = {
+                ...lastBlock,
+                content: (lastBlock.content || '') + (event.content || ''),
+              }
+              return { ...prev, blocks: updatedBlocks }
+            }
+            return {
+              ...prev,
+              blocks: [...blocks, {
+                id: generateId(),
+                type: 'text',
+                timestamp: Date.now(),
+                content: event.content || '',
+              }],
+            }
+          })
         }
         break
       }
@@ -156,78 +196,121 @@ export function useChat() {
             args: event.tool_args || '',
             status: 'running',
           }
-          setCurrentAssistantMessage((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  toolCalls: upsertToolCall(prev.toolCalls || [], toolCall),
-                }
-              : null
-          )
+          setCurrentAssistantMessage((prev) => {
+            if (!prev) return null
+            const toolCallMap = new Map(prev.toolCallMap || [])
+            toolCallMap.set(id, toolCall)
+            return {
+              ...prev,
+              toolCallMap,
+              blocks: [...(prev.blocks || []), {
+                id: `tool-${id}`,
+                type: 'tool_call',
+                timestamp: Date.now(),
+                toolCall,
+              }],
+            }
+          })
         }
         break
       }
 
       case 'tool_call_args': {
         if (currentAssistantMessage) {
-          setCurrentAssistantMessage((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  toolCalls: event.tool_call_id
-                    ? updateToolCallById(
-                        prev.toolCalls || [],
-                        event.tool_call_id,
-                        (tc) => ({ ...tc, args: tc.args + (event.content || '') })
-                      )
-                    : updateLastRunningByName(
-                        prev.toolCalls || [],
-                        event.tool_name || 'unknown',
-                        (tc) => ({ ...tc, args: tc.args + (event.content || '') })
-                      ),
+          setCurrentAssistantMessage((prev) => {
+            if (!prev) return null
+            const toolCallMap = new Map(prev.toolCallMap || [])
+            const toolId = event.tool_call_id
+
+            // Find and update the tool call
+            for (const [id, tc] of toolCallMap) {
+              if (id === toolId || (tc.name === event.tool_name && tc.status === 'running')) {
+                toolCallMap.set(id, {
+                  ...tc,
+                  args: tc.args + (event.content || ''),
+                })
+                break
+              }
+            }
+
+            // Update the block as well
+            const blocks = (prev.blocks || []).map(block => {
+              if (block.type === 'tool_call' && block.toolCall) {
+                const tc = block.toolCall
+                if (tc.id === toolId || (tc.name === event.tool_name && tc.status === 'running')) {
+                  return {
+                    ...block,
+                    toolCall: {
+                      ...tc,
+                      args: tc.args + (event.content || ''),
+                    },
+                  }
                 }
-              : null
-          )
+              }
+              return block
+            })
+
+            return { ...prev, toolCallMap, blocks }
+          })
         }
         break
       }
 
       case 'tool_result': {
         if (currentAssistantMessage) {
-          const status = ((event.data as { status?: string } | null)?.status === 'error')
-            ? 'error'
-            : 'completed'
-          setCurrentAssistantMessage((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  toolCalls: event.tool_call_id
-                    ? updateToolCallById(
-                        prev.toolCalls || [],
-                        event.tool_call_id,
-                        (tc) => ({
-                          ...tc,
-                          result: event.content || '',
-                          status,
-                        })
-                      )
-                    : updateLastRunningByName(
-                        prev.toolCalls || [],
-                        event.tool_name || 'unknown',
-                        (tc) => ({
-                          ...tc,
-                          result: event.content || '',
-                          status,
-                        })
-                      ),
+          setCurrentAssistantMessage((prev) => {
+            if (!prev) return null
+            const status: 'error' | 'completed' = ((event.data as { status?: string } | null)?.status === 'error')
+              ? 'error'
+              : 'completed'
+
+            const toolCallMap = new Map(prev.toolCallMap || [])
+            const toolId = event.tool_call_id
+
+            // Update in map
+            for (const [id, tc] of toolCallMap) {
+              if (id === toolId || (tc.name === event.tool_name && tc.status === 'running')) {
+                toolCallMap.set(id, {
+                  ...tc,
+                  result: event.content || '',
+                  status,
+                })
+                break
+              }
+            }
+
+            // Update the block
+            const blocks = (prev.blocks || []).map(block => {
+              if (block.type === 'tool_call' && block.toolCall) {
+                const tc = block.toolCall
+                if (tc.id === toolId || (tc.name === event.tool_name && tc.status === 'running')) {
+                  return {
+                    ...block,
+                    toolCall: {
+                      ...tc,
+                      result: event.content || '',
+                      status,
+                    },
+                  }
                 }
-              : null
-          )
+              }
+              return block
+            })
+
+            return { ...prev, toolCallMap, blocks }
+          })
+        }
+        break
+      }
+
+      case 'todo_update': {
+        if (event.todos) {
+          setTodos(event.todos)
         }
         break
       }
     }
-  }, [currentAssistantMessage, updateLastRunningByName, updateToolCallById, upsertToolCall])
+  }, [currentAssistantMessage])
 
   const addUserMessage = useCallback((content: string) => {
     const message: Message = {
@@ -253,6 +336,7 @@ export function useChat() {
     await newSession()
     setMessages([])
     setCurrentAssistantMessage(null)
+    setTodos([])
   }, [newSession])
 
   // Get all messages including the current streaming one
@@ -266,8 +350,10 @@ export function useChat() {
     isStreaming,
     error,
     messageEndRef,
+    scrollViewportRef: setScrollViewportRef,
     handleSend,
     handleNewSession,
     clearError,
+    todos,
   }
 }

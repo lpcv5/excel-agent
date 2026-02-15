@@ -12,6 +12,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { MessageList } from './MessageList'
 import { InputBar } from './InputBar'
+import { TodoPanel } from './TodoPanel'
 import { useChat } from '@/hooks/useChat'
 
 interface UnsavedWorkbook {
@@ -27,9 +28,11 @@ export function ChatPanel() {
     isStreaming,
     error,
     messageEndRef,
+    scrollViewportRef,
     handleSend,
     handleNewSession,
     clearError,
+    todos,
   } = useChat()
 
   const [showCloseDialog, setShowCloseDialog] = useState(false)
@@ -154,8 +157,8 @@ export function ChatPanel() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/15">
+                <AlertTriangle className="h-5 w-5 text-warning" />
               </div>
               <div>
                 <DialogTitle>Unsaved Workbooks</DialogTitle>
@@ -207,9 +210,13 @@ export function ChatPanel() {
         <MessageList
           messages={messages}
           messageEndRef={messageEndRef}
+          viewportRef={scrollViewportRef}
           onExampleClick={handleExampleClick}
         />
       </div>
+
+      {/* Todo Panel - above InputBar */}
+      <TodoPanel todos={todos} />
 
       {/* Input */}
       <InputBar
