@@ -67,6 +67,7 @@ class AgentEvent:
     content: Optional[str] = None
     tool_name: Optional[str] = None
     tool_args: Optional[str] = None
+    tool_call_id: Optional[str] = None
     error_message: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,6 +78,7 @@ class AgentEvent:
             "content": self.content,
             "tool_name": self.tool_name,
             "tool_args": self.tool_args,
+            "tool_call_id": self.tool_call_id,
             "error_message": self.error_message,
             "data": self.data,
         }

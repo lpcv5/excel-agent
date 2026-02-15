@@ -305,6 +305,24 @@ class ExcelAppManager:
             except Exception:
                 pass
 
+    def is_app_alive(self) -> bool:
+        """Check if the Excel COM application object is still alive.
+
+        Returns:
+            True if the COM app is responsive, False otherwise.
+        """
+        if self._app is None:
+            return False
+        try:
+            _ = self._app.Workbooks.Count  # type: ignore
+            return True
+        except Exception:
+            # COM object likely disconnected; clear reference
+            self._app = None
+            self._workbooks.clear()
+            self._workbook_owned.clear()
+            return False
+
     def _get_excel_pids(self) -> set[int]:
         """Get all Excel process IDs."""
         pids = set()
@@ -439,9 +457,17 @@ class ExcelAppManager:
 
         str_path = str(path)
 
-        # Return cached workbook if already tracked
+        # Return cached workbook if already tracked and still alive
         if str_path in self._workbooks:
-            return self._workbooks[str_path]
+            workbook = self._workbooks[str_path]
+            try:
+                _ = workbook.Name  # type: ignore
+                _ = workbook.FullName  # type: ignore
+                return workbook
+            except Exception:
+                # Cached workbook is stale/disconnected; remove and reopen
+                self._workbooks.pop(str_path, None)
+                self._workbook_owned.pop(str_path, None)
 
         # Check if workbook is already open in the Excel instance
         workbook = self._find_open_workbook(str_path)

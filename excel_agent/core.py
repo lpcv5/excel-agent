@@ -264,7 +264,8 @@ Use absolute Windows paths under this directory when working with files.
             import json as json_mod
             return ToolCallStartEvent(
                 tool_name=parser_event.name,
-                tool_args=json_mod.dumps(parser_event.args)
+                tool_args=json_mod.dumps(parser_event.args),
+                tool_call_id=getattr(parser_event, "id", None),
             )
 
         elif isinstance(parser_event, ParserToolCallArgsEvent):
@@ -279,18 +280,20 @@ Use absolute Windows paths under this directory when working with files.
             return ToolCallArgsEvent(
                 tool_name=parser_event.name,
                 content=parser_event.args,
+                tool_call_id=getattr(parser_event, "id", None),
             )
 
         elif isinstance(parser_event, ToolCallEndEvent):
-            # Tool completed - emit result event
-            # Check for error status
+            # Tool completed - emit result event (including error status)
+            content = ""
             if parser_event.status == "error":
-                return ErrorEvent(
-                    error_message=parser_event.error_message or "Tool call failed"
-                )
+                content = parser_event.error_message or "Tool call failed"
+            else:
+                content = str(parser_event.result)[:1000] if parser_event.result else ""
             return ToolResultEvent(
                 tool_name=parser_event.name,
-                content=str(parser_event.result)[:1000] if parser_event.result else "",
+                content=content,
+                tool_call_id=getattr(parser_event, "id", None),
                 data={"status": parser_event.status, "duration_ms": parser_event.duration_ms}
             )
 

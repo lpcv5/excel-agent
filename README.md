@@ -126,16 +126,18 @@ excel-agent/
 |------|-------------|
 | `excel_status` | Get current Excel application status and open workbooks |
 
-### Workbook Operations (7)
+### Workbook Operations (3)
 | Tool | Description |
 |------|-------------|
-| `excel_open_workbook` | Open an Excel workbook file |
 | `excel_create_workbook` | Create a new Excel workbook |
 | `excel_list_worksheets` | List all worksheets in a workbook |
+| `excel_save_workbook` | Save the workbook (optionally as new file) |
+
+### Range Operations (2)
+| Tool | Description |
+|------|-------------|
 | `excel_read_range` | Read data from a cell range |
 | `excel_write_range` | Write data to a cell range |
-| `excel_save_workbook` | Save the workbook (optionally as new file) |
-| `excel_close_workbook` | Close an open workbook |
 
 ### Worksheet Operations (5)
 | Tool | Description |
