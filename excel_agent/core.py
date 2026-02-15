@@ -161,8 +161,7 @@ class AgentCore:
 
 Your working directory is: `{working_dir_str}`
 
-All file operations are relative to this directory. When the user asks about files
-or wants to work with Excel files, use paths relative to this directory or absolute paths.
+Use absolute Windows paths under this directory when working with files.
 """
 
         return create_deep_agent(
