@@ -12,7 +12,7 @@ class TestAgentConfig:
 
         config = AgentConfig()
 
-        assert config.model == "openai:gpt-5-mini"
+        assert config.model == "zhipu:glm-5"
         assert config.excel_visible is False
         assert config.streaming_enabled is True
 

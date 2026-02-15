@@ -284,3 +284,164 @@ def set_row_height(
         worksheet = manager.get_worksheet(workbook, worksheet_name)
         range_obj = worksheet.Range(rows)
         range_obj.RowHeight = height
+
+
+# =============================================================================
+# Reverse Mappings for get_format
+# =============================================================================
+
+# Reverse lookup dictionaries (COM value -> string)
+HORIZONTAL_ALIGNMENT_REVERSE = {
+    -4131: "left",    # XL_LEFT
+    -4108: "center",  # XL_CENTER
+    -4152: "right",   # XL_RIGHT
+    1: "general",     # XL_GENERAL
+}
+
+VERTICAL_ALIGNMENT_REVERSE = {
+    -4160: "top",      # XL_TOP
+    -4107: "bottom",   # XL_BOTTOM
+    -4130: "justify",  # XL_JUSTIFY
+    -4108: "center",   # XL_CENTER_V
+}
+
+BORDER_STYLE_REVERSE = {
+    1: "continuous",     # XL_CONTINUOUS
+    -4115: "dash",       # XL_DASH
+    -4118: "dot",        # XL_DOT
+    -4119: "double",     # XL_DOUBLE
+    -4142: "none",       # XL_NONE
+    -4135: "slant_dash_dot",  # XL_SLANT_DASH_DOT
+}
+
+BORDER_WEIGHT_REVERSE = {
+    1: "hairline",  # XL_HAIRLINE
+    2: "thin",      # XL_THIN
+    -4138: "medium",  # XL_MEDIUM
+    4: "thick",     # XL_THICK
+}
+
+UNDERLINE_STYLE_REVERSE = {
+    2: True,     # XL_UNDERLINE_STYLE_SINGLE
+    -4142: False,  # XL_UNDERLINE_STYLE_NONE
+}
+
+
+# =============================================================================
+# Format Query Operations
+# =============================================================================
+
+def get_format(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    range_address: str
+) -> dict:
+    """Get formatting information for a range.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        range_address: Range address
+
+    Returns:
+        Dictionary containing formatting information:
+            - font: {name, size, bold, italic, underline, color}
+            - fill: {color}
+            - alignment: {horizontal, vertical, wrap_text}
+            - border: {style, weight, color}
+            - number_format: str
+    """
+    worksheet = manager.get_worksheet(workbook, worksheet_name)
+    range_obj = worksheet.Range(range_address)
+
+    result = {}
+
+    # Font info
+    font = range_obj.Font
+    font_info = {
+        "name": font.Name,
+        "size": font.Size,
+        "bold": font.Bold,
+        "italic": font.Italic,
+        "underline": UNDERLINE_STYLE_REVERSE.get(font.Underline, False),
+    }
+    # Convert color from int to hex (if not automatic)
+    try:
+        if font.Color != -16776961:  # xlColorIndexAutomatic
+            font_info["color"] = f"{int(font.Color) & 0xFFFFFF:06X}"
+    except Exception:
+        pass
+    result["font"] = font_info
+
+    # Fill/background info
+    interior = range_obj.Interior
+    try:
+        if interior.ColorIndex != -4142:  # xlNone
+            fill_info = {"color": f"{int(interior.Color) & 0xFFFFFF:06X}"}
+            result["fill"] = fill_info
+    except Exception:
+        pass
+
+    # Alignment info
+    alignment_info = {}
+    h_align = range_obj.HorizontalAlignment
+    if h_align in HORIZONTAL_ALIGNMENT_REVERSE:
+        alignment_info["horizontal"] = HORIZONTAL_ALIGNMENT_REVERSE[h_align]
+
+    v_align = range_obj.VerticalAlignment
+    if v_align in VERTICAL_ALIGNMENT_REVERSE:
+        alignment_info["vertical"] = VERTICAL_ALIGNMENT_REVERSE[v_align]
+
+    alignment_info["wrap_text"] = range_obj.WrapText
+    result["alignment"] = alignment_info
+
+    # Border info (check all edges)
+    borders = range_obj.Borders
+    try:
+        # Get the overall border style if all edges are the same
+        line_style = borders.LineStyle
+        if line_style != -4142:  # xlNone
+            border_info = {
+                "style": BORDER_STYLE_REVERSE.get(line_style, "continuous"),
+            }
+            weight = borders.Weight
+            if weight in BORDER_WEIGHT_REVERSE:
+                border_info["weight"] = BORDER_WEIGHT_REVERSE[weight]
+            try:
+                border_info["color"] = f"{int(borders.Color) & 0xFFFFFF:06X}"
+            except Exception:
+                pass
+            result["border"] = border_info
+    except Exception:
+        pass
+
+    # Number format
+    number_format = range_obj.NumberFormat
+    if number_format and number_format != "General":
+        result["number_format"] = number_format
+
+    return result
+
+
+def clear_format(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    range_address: str
+) -> None:
+    """Clear all formatting from a range (keeps contents).
+
+    This operation preserves the user's Excel view state (active sheet,
+    selection, scroll position) to minimize disruption.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        range_address: Range address to clear formatting from
+    """
+    with preserve_user_state(manager.app):
+        worksheet = manager.get_worksheet(workbook, worksheet_name)
+        worksheet.Range(range_address).ClearFormats()

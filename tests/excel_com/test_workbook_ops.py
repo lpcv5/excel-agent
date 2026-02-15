@@ -55,7 +55,7 @@ class TestCloseWorkbook:
 
         workbook_ops.close_workbook(manager, "/path/to/file.xlsx", save=True)
 
-        manager.close_workbook.assert_called_once_with("/path/to/file.xlsx", True)
+        manager.close_workbook.assert_called_once_with("/path/to/file.xlsx", True, force=True)
 
     def test_close_workbook_without_save(self):
         """Test close_workbook without saving."""
@@ -63,7 +63,7 @@ class TestCloseWorkbook:
 
         workbook_ops.close_workbook(manager, "/path/to/file.xlsx", save=False)
 
-        manager.close_workbook.assert_called_once_with("/path/to/file.xlsx", False)
+        manager.close_workbook.assert_called_once_with("/path/to/file.xlsx", False, force=True)
 
 
 class TestSaveWorkbook:
