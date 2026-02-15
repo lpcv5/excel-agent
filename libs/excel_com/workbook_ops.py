@@ -293,3 +293,127 @@ def write_range(
     with preserve_user_state(manager.app):
         worksheet = manager.get_worksheet(workbook, worksheet_name)
         manager.write_range(worksheet, range_address, data)
+
+
+# =============================================================================
+# Row/Column Insert/Delete Operations
+# =============================================================================
+
+def insert_rows(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    index: int,
+    count: int = 1
+) -> None:
+    """Insert rows at a specified position.
+
+    This operation preserves the user's Excel view state (active sheet,
+    selection, scroll position) to minimize disruption.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        index: Row number to insert before (1-based)
+        count: Number of rows to insert (default: 1)
+    """
+    with preserve_user_state(manager.app):
+        worksheet = manager.get_worksheet(workbook, worksheet_name)
+        worksheet.Rows(index).Resize(count).Insert()
+
+
+def insert_columns(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    index: str,
+    count: int = 1
+) -> None:
+    """Insert columns at a specified position.
+
+    This operation preserves the user's Excel view state (active sheet,
+    selection, scroll position) to minimize disruption.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        index: Column letter to insert before (e.g., "A", "C")
+        count: Number of columns to insert (default: 1)
+    """
+    with preserve_user_state(manager.app):
+        worksheet = manager.get_worksheet(workbook, worksheet_name)
+        # Use ColumnSize named parameter for Resize
+        worksheet.Columns(index).Resize(ColumnSize=count).Insert()
+
+
+def delete_rows(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    index: int,
+    count: int = 1
+) -> None:
+    """Delete rows at a specified position.
+
+    This operation preserves the user's Excel view state (active sheet,
+    selection, scroll position) to minimize disruption.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        index: Starting row number to delete (1-based)
+        count: Number of rows to delete (default: 1)
+    """
+    with preserve_user_state(manager.app):
+        worksheet = manager.get_worksheet(workbook, worksheet_name)
+        worksheet.Rows(index).Resize(count).Delete()
+
+
+def delete_columns(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    index: str,
+    count: int = 1
+) -> None:
+    """Delete columns at a specified position.
+
+    This operation preserves the user's Excel view state (active sheet,
+    selection, scroll position) to minimize disruption.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        index: Starting column letter to delete (e.g., "A", "C")
+        count: Number of columns to delete (default: 1)
+    """
+    with preserve_user_state(manager.app):
+        worksheet = manager.get_worksheet(workbook, worksheet_name)
+        # Use ColumnSize named parameter for Resize
+        worksheet.Columns(index).Resize(ColumnSize=count).Delete()
+
+
+def clear_range(
+    manager: ExcelAppManager,
+    workbook: object,
+    worksheet_name: str,
+    range_address: str
+) -> None:
+    """Clear contents (but not formatting) from a range.
+
+    This operation preserves the user's Excel view state (active sheet,
+    selection, scroll position) to minimize disruption.
+
+    Args:
+        manager: ExcelAppManager instance
+        workbook: Workbook COM object
+        worksheet_name: Name of the worksheet
+        range_address: Range address to clear (e.g., "A1:D10")
+    """
+    with preserve_user_state(manager.app):
+        worksheet = manager.get_worksheet(workbook, worksheet_name)
+        worksheet.Range(range_address).ClearContents()
