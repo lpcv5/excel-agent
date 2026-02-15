@@ -7,6 +7,7 @@ via the Windows COM interface. Requires Microsoft Excel and Windows platform.
 Low-level COM operations are in libs.excel_com package.
 """
 
+import gc
 import json
 import threading
 from pathlib import Path
@@ -14,7 +15,11 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-from libs.excel_com.manager import ExcelAppManager
+from libs.excel_com.manager import (
+    ExcelAppManager,
+    cleanup_all_managers,
+    force_cleanup_excel_processes,
+)
 from libs.excel_com import workbook_ops, formatting_ops, formula_ops
 
 
@@ -56,6 +61,56 @@ def get_excel_manager() -> ExcelAppManager:
                     pass  # Ignore errors during re-opening
 
     return manager
+
+
+def cleanup_excel_resources(force: bool = True) -> dict:
+    """Clean up all Excel COM resources across all threads.
+
+    This function should be called when the application is closing
+    to ensure all Excel COM objects are properly released.
+
+    Args:
+        force: If True, force-terminate any remaining Excel processes
+            created by this application.
+
+    Returns:
+        Dict with cleanup status
+    """
+    errors = []
+
+    # Clear the global workbook registry
+    with _workbook_lock:
+        _opened_workbooks.clear()
+
+    # First try graceful COM cleanup
+    try:
+        cleanup_all_managers()
+    except Exception as e:
+        errors.append(f"COM cleanup error: {str(e)}")
+
+    # Clear thread-local manager reference
+    if hasattr(_thread_local, 'manager'):
+        try:
+            delattr(_thread_local, 'manager')
+        except Exception:
+            pass
+
+    # Force multiple rounds of garbage collection
+    for _ in range(5):
+        gc.collect()
+
+    if force:
+        # Force terminate any remaining Excel processes
+        try:
+            force_cleanup_excel_processes()
+        except Exception as e:
+            errors.append(f"Force cleanup error: {str(e)}")
+
+    return {
+        "success": len(errors) == 0,
+        "errors": errors if errors else None,
+        "forced": force,
+    }
 
 
 def normalize_filepath(filepath: str) -> str:

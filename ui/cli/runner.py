@@ -21,6 +21,7 @@ from excel_agent.events import (
     ToolResultEvent,
 )
 from ui.base import BaseUI
+from tools.excel_tool import cleanup_excel_resources
 
 
 class CLIRunner(BaseUI):
@@ -49,35 +50,38 @@ class CLIRunner(BaseUI):
         print("=" * 60)
         print()
 
-        while True:
-            try:
-                user_input = input("You: ").strip()
+        try:
+            while True:
+                try:
+                    user_input = input("You: ").strip()
 
-                if not user_input:
-                    continue
+                    if not user_input:
+                        continue
 
-                if user_input.lower() in ["quit", "exit", "q"]:
-                    print("\nGoodbye!")
+                    if user_input.lower() in ["quit", "exit", "q"]:
+                        print("\nGoodbye!")
+                        break
+
+                    # Process streaming events
+                    async for event in self.core.astream_query(user_input):
+                        self._render_event(event)
+
+                    # Final newline after streaming completes
+                    print("\n")
+
+                    # Reset state for next query
+                    self._reset_state()
+
+                except KeyboardInterrupt:
+                    print("\n\nGoodbye!")
                     break
-
-                # Process streaming events
-                async for event in self.core.astream_query(user_input):
-                    self._render_event(event)
-
-                # Final newline after streaming completes
-                print("\n")
-
-                # Reset state for next query
-                self._reset_state()
-
-            except KeyboardInterrupt:
-                print("\n\nGoodbye!")
-                break
-            except asyncio.CancelledError:
-                print("\n\nGoodbye!")
-                break
-            except Exception as e:
-                print(f"\nError: {e}\n")
+                except asyncio.CancelledError:
+                    print("\n\nGoodbye!")
+                    break
+                except Exception as e:
+                    print(f"\nError: {e}\n")
+        finally:
+            self._cleanup_excel()
 
     def run_single_query(self, query: str) -> str:
         """Run a single query and print the result.
@@ -88,9 +92,12 @@ class CLIRunner(BaseUI):
         Returns:
             The agent's response
         """
-        result = self.core.invoke(query)
-        print(result)
-        return result
+        try:
+            result = self.core.invoke(query)
+            print(result)
+            return result
+        finally:
+            self._cleanup_excel()
 
     def _render_event(self, event: AgentEvent) -> None:
         """Render an event to the console.
@@ -160,3 +167,11 @@ class CLIRunner(BaseUI):
         self._last_event_type = None
         self._current_tool_name = None
         self._current_tool_args = ""
+
+    @staticmethod
+    def _cleanup_excel() -> None:
+        """Best-effort cleanup of Excel COM resources on exit."""
+        try:
+            cleanup_excel_resources(force=False)
+        except Exception:
+            pass
