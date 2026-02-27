@@ -2,128 +2,81 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
-
-Excel Agent is a DeepAgents-based intelligent Excel processing agent that uses Windows COM to interact directly with Microsoft Excel. It provides natural language interaction for data analysis, formula generation, and report creation.
-
-**Platform Requirement**: Windows with Microsoft Excel installed.
-
-## Key Commands
+## Commands
 
 ```bash
-# Install dependencies
+# Development (starts Vite + pywebview together)
+bun run dev:app
+
+# Frontend only
+bun run dev          # Vite dev server on port 5173
+bun run lint         # ESLint
+
+# Production
+bun run build        # tsc + vite build
+bun run pywebview:prod  # Run with built dist/
+
+# Package to standalone executable (Nuitka)
+bun run package
+
+# Python deps managed via uv
 uv sync
 
-# Run in interactive CLI mode (default)
-uv run python agent.py
+# Python linting/formatting
+uv run ruff check src-python/
+uv run ruff format src-python/  # excludes libs/deepagents (configured in pyproject.toml)
 
-# Run single query
-uv run python agent.py "Read sales.xlsx and show the first 10 rows"
-
-# Run with Web UI
-uv run python agent.py --web
-
-# List available tools
-uv run python agent.py --list-tools
-
-# Run with specific model
-uv run python agent.py --model openai:gpt-4 "Analyze data.xlsx"
-
-# Run with LLM call logging (for debugging)
-uv run python agent.py --log-level DEBUG "Read data.xlsx"
-
-# Run tests
-uv run pytest
-
-# Run specific test file
-uv run pytest tests/test_agent.py
-
-# Run tests with coverage
-uv run pytest --cov
+# Python type checking
+uv run pyright src-python/
 ```
 
 ## Architecture
 
-The codebase has four layers:
+This is a **pywebview + React desktop app** — Python backend exposed to a React frontend via pywebview's JS bridge.
 
-```
-agent.py               # CLI entry point with UI mode selection
-excel_agent/           # UI-agnostic agent core
-├── core.py            # AgentCore - agent creation, streaming, events
-├── config.py          # AgentConfig dataclass with logging settings
-├── events.py          # Event types for UI consumption
-├── session.py         # Session management
-└── callbacks/         # LangChain callbacks
-tools/
-└── excel_tool.py      # LangChain @tool wrappers, returns JSON strings
-ui/                    # UI implementations
-├── cli/runner.py      # CLI interface (default)
-└── web/server.py      # Web UI interface (--web flag)
-libs/
-├── excel_com/         # COM interface layer for Excel operations
-│   ├── manager.py     # ExcelAppManager - COM lifecycle, workbook tracking
-│   ├── workbook_ops.py
-│   ├── formatting_ops.py
-│   ├── formula_ops.py
-│   ├── advanced_ops.py
-│   ├── constants.py   # Excel enum mappings (e.g., xlCenter)
-│   ├── context.py     # Context managers for preserving Excel state
-│   └── exceptions.py
-├── stream_msg_parser/ # Streaming message parser for LangGraph
-│   ├── parser.py
-│   └── events.py
-└── deepagents/        # DeepAgents framework (submodule)
-```
+### Frontend (`src/`)
 
-**Data Flow**: Natural language query → UI (CLI/Web) → AgentCore → DeepAgent → excel_tool.py → libs/excel_com/ → Windows COM → Excel
+- `src/App.tsx` — root with ErrorBoundary
+- `src/stores/chatStore.ts` — Zustand store; single source of truth for conversations, messages, streaming state
+- `src/services/pywebview.ts` — HTTP client for the FastAPI backend; uses SSE for streaming, REST for settings/dialogs
+- `src/components/chat/` — streaming chat UI (AssistantBubble, ToolGroupBlock, TaskPanel, ThinkingBlock)
+- `src/components/layout/` — AppLayout with TitleBar, sidebars, MainContent, Footer
 
-### AgentCore Pattern
+### Backend (`src-python/`)
 
-The `AgentCore` class in `excel_agent/core.py` is the UI-agnostic interface:
-- `astream_query()`: Async streaming with event-based output
-- `invoke()`: Single query, returns string
-- Emits events: `TextEvent`, `ToolCallStartEvent`, `ToolResultEvent`, `ErrorEvent`, etc.
+- `src-python/main.py` — creates pywebview window, handles dev (connects to Vite URL) vs prod (loads `dist/`)
+- `src-python/server.py` — FastAPI app on port 8765; token-based auth (`EXCEL_AGENT_TOKEN` env var or auto-generated); endpoints:
+  - `GET /health` — no auth required
+  - `GET/POST /api/settings` — provider/model/api_key persisted to `~/.excel_agent/settings.json`
+  - `POST /api/stream` — SSE streaming endpoint that runs the agent and emits events
+  - `POST /api/dialog/open`, `POST /api/dialog/save` — file dialogs via pywebview
+- `src-python/agent/core.py` — `AgentCore`: initializes the DeepAgents LLM agent, streams queries via `astream_query()`, converts `MessageParser` events → `AgentEvent` types
+- `src-python/agent/config.py` — `AgentConfig` dataclass; default model is `"zhipu:glm-4.7"` (format: `provider:model_name`)
+- `src-python/agent/model_provider.py` — maps provider names to OpenAI-compatible API configs; supported: `zhipu`, `openai`, `deepseek`, `moonshot`
+- `src-python/agent/events.py` — `AgentEvent` type definitions (EventType enum + event dataclasses)
+- `src-python/tools/excel_tools/` — excel tool implementations (range, worksheet, chart, pivot, VBA, etc.)
+- `src-python/libs/excel/` — utilities for working with Excel via `pywin32` (COM automation, cell references, A1/R1C1 notation)
+- `src-python/libs/deepagents/` — DeepAgents framework (vendored, not a pip package); contains `graph.py`, backends, and middleware
+- `src-python/libs/stream_msg_parser/` — streaming LLM message parser
 
-### COM Layer Patterns
+### Dev orchestration
 
-The excel_com layer uses thread-local storage for COM objects (COM cannot cross threads):
+- `dev.py` — starts uvicorn (FastAPI) on port 8765 with `--reload`, starts Vite on port 5173, then launches pywebview pointing at `http://localhost:5173`
+- `build.py` — builds React first, then compiles Python to a standalone exe via Nuitka (`--onefile`)
 
-```python
-# Thread-local manager pattern (from tools/excel_tool.py)
-_thread_local = threading.local()
+### Streaming event protocol
 
-def get_excel_manager() -> ExcelAppManager:
-    if not hasattr(_thread_local, 'manager'):
-        _thread_local.manager = ExcelAppManager(visible=False, display_alerts=False)
-    return _thread_local.manager
-```
+The frontend connects to `POST /api/stream` via SSE. The server yields `data: <json>\n\n` lines with a `type` field. Event types:
 
-ExcelAppManager tracks workbook ownership - workbooks opened by the user are NOT closed by the agent.
+- `stream:content-token`, `stream:thinking-token`
+- `stream:tool-group-start`, `stream:tool-call-update`, `stream:tool-group-done`
+- `stream:tasks-init`, `stream:task-update`
+- `stream:done` (payload may include `{error: string}` on failure)
 
-### Tool Implementation Pattern
+The Zustand store in `chatStore.ts` consumes these events and drives all UI updates.
 
-Tools use LangChain's `@tool` decorator and return JSON strings:
+### UI
 
-```python
-@tool
-def my_tool(param: str) -> str:
-    """Tool description for the LLM."""
-    try:
-        result = {"success": True, "data": ...}
-        return json.dumps(result, indent=2, default=str, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-```
-
-### Testing
-
-Tests use a shared mock COM factory (tests/conftest.py) with pytest fixtures. All COM-related tests mock the win32com.client.Dispatch calls.
-
-## Dependencies
-
-- Python 3.12+
-- deepagents (local: libs/deepagents/libs/deepagents)
-- stream_msg_parser (local: libs/stream_msg_parser)
-- pywin32 (Windows COM interface)
-- langgraph (state graph, checkpointing)
-- langchain-openai (LLM provider)
+- shadcn/ui (New York style) + Tailwind CSS v4
+- Add components: `bunx shadcn@latest add <component>` (MCP server configured in `.mcp.json`)
+- Path alias: `@/` → `src/`

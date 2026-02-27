@@ -1,188 +1,75 @@
-# Excel Agent
+# pywebview + React Desktop App Template
 
-A DeepAgents-based intelligent Excel processing agent that uses Windows COM to interact directly with Microsoft Excel. It provides natural language interaction for data analysis, formula generation, and report creation.
+A desktop application template using **pywebview** for the native window and **React** for the UI. Inspired by Tauri's project layout with `src/` for the frontend and `src-python/` for the backend.
 
-**Platform Requirement**: Windows with Microsoft Excel installed.
+## Tech Stack
 
-## Features
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui
+- **Backend**: Python 3.9+, pywebview 5+
+- **Packaging**: Nuitka (compiles to standalone executable)
 
-- **Direct Excel Integration**: Works with real Excel files via Windows COM interface
-- **Natural Language Interface**: Interact with Excel using plain English commands
-- **Multiple UI Modes**: CLI (default) and Web UI (`--web` flag)
-- **Comprehensive Operations**: Read, write, format, and manipulate Excel data
-- **Formula Support**: Set and read Excel formulas
-- **Formatting Tools**: Font, cell, border, and background formatting
-
-## Installation
+## Setup
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd excel-agent
+# Install frontend dependencies (npm, bun, yarn, or pnpm all work)
+npm install   # or: bun install / yarn install / pnpm install
 
-# Install dependencies with uv
+# Install Python dependencies (requires uv: https://docs.astral.sh/uv/)
 uv sync
 ```
 
-## Usage
+## Development
 
-### Interactive CLI Mode (Default)
-
-```bash
-uv run python agent.py
-```
-
-### Single Query
+Single command (like `tauri dev`):
 
 ```bash
-uv run python agent.py "Read sales.xlsx and show the first 10 rows"
+npm run dev:app
+# or with a different package manager:
+uv run python dev.py --pm bun
+uv run python dev.py --pm yarn
+uv run python dev.py --pm pnpm
 ```
 
-### Web UI Mode
+## Production
 
 ```bash
-uv run python agent.py --web
+npm run build
+npm run pywebview:prod
 ```
 
-### List Available Tools
+## Packaging (Nuitka)
 
 ```bash
-uv run python agent.py --list-tools
+npm run package
 ```
 
-### With Specific Model
+Produces a single standalone executable with the React frontend bundled inside. No Python or Node.js required on the target machine.
 
-```bash
-uv run python agent.py --model openai:gpt-4 "Analyze data.xlsx"
+## Adding New API Methods
+
+1. Add a method to `src-python/api.py`:
+
+```python
+class Api:
+    def greet(self, name: str) -> str:
+        return f"Hello, {name}! This response came from Python."
+
+    def add(self, a: float, b: float) -> float:
+        return a + b
 ```
 
-### With LLM Call Logging (Debugging)
+2. Update the TypeScript interface in `src/vite-env.d.ts`:
 
-```bash
-uv run python agent.py --log-level DEBUG "Read data.xlsx"
-uv run python agent.py --log-level DEBUG --log-file logs/llm.log "Analyze data.xlsx"
+```typescript
+interface PyWebViewApi {
+  greet(name: string): Promise<string>;
+  add(a: number, b: number): Promise<number>;
+}
 ```
 
-## Examples
+3. Call it from React using the bridge:
 
-### Data Operations
-
-```bash
-# Open and read data
-uv run python agent.py "Open sales.xlsx and show me the first 10 rows"
-
-# Write data
-uv run python agent.py "Write the values 'Q1', 'Q2', 'Q3', 'Q4' in cells A1:A4 of report.xlsx"
+```typescript
+const api = await getPyWebViewApi();
+const result = await api.add(2, 3);
 ```
-
-### Formatting
-
-```bash
-# Format headers
-uv run python agent.py "Format the header row in data.xlsx with bold text and yellow background"
-
-# Adjust columns
-uv run python agent.py "Auto-fit all columns in sales.xlsx"
-```
-
-### Formulas
-
-```bash
-# Add a formula
-uv run python agent.py "Add a SUM formula in cell C10 to sum C1:C9 in budget.xlsx"
-
-# Read formulas
-uv run python agent.py "Show me the formula in cell D5 of calculations.xlsx"
-```
-
-## Project Structure
-
-```
-excel-agent/
-├── agent.py              # CLI entry point with UI mode selection
-├── excel_agent/          # UI-agnostic agent core
-│   ├── core.py           # AgentCore - agent creation and streaming
-│   ├── config.py         # Configuration dataclass
-│   └── events.py         # Event types for UI consumption
-├── tools/
-│   └── excel_tool.py     # LangChain @tool wrappers for Excel operations
-├── ui/                   # UI implementations
-│   ├── cli/              # CLI interface (default)
-│   └── web/              # Web UI interface
-├── libs/
-│   ├── excel_com/        # COM interface layer for Excel operations
-│   ├── stream_msg_parser/ # Streaming message parser
-│   └── deepagents/       # DeepAgents framework (submodule)
-├── skills/               # Specialized skill definitions
-├── tests/                # Test suite
-├── AGENTS.md             # Agent identity and behavior rules
-└── pyproject.toml
-```
-
-## Available Tools
-
-### Status (1)
-| Tool | Description |
-|------|-------------|
-| `excel_status` | Get current Excel application status and open workbooks |
-
-### Workbook Operations (3)
-| Tool | Description |
-|------|-------------|
-| `excel_create_workbook` | Create a new Excel workbook |
-| `excel_list_worksheets` | List all worksheets in a workbook |
-| `excel_save_workbook` | Save the workbook (optionally as new file) |
-
-### Range Operations (2)
-| Tool | Description |
-|------|-------------|
-| `excel_read_range` | Read data from a cell range |
-| `excel_write_range` | Write data to a cell range |
-
-### Worksheet Operations (5)
-| Tool | Description |
-|------|-------------|
-| `excel_add_worksheet` | Add a new worksheet |
-| `excel_delete_worksheet` | Delete a worksheet |
-| `excel_rename_worksheet` | Rename a worksheet |
-| `excel_copy_worksheet` | Copy a worksheet |
-| `excel_get_used_range` | Get the used range of a worksheet |
-
-### Formatting (4)
-| Tool | Description |
-|------|-------------|
-| `excel_set_font_format` | Set font name, size, bold, italic, underline, color |
-| `excel_set_cell_format` | Set alignment, wrap text, number format |
-| `excel_set_border_format` | Set border style, weight, and color |
-| `excel_set_background_color` | Set cell background color |
-
-### Formula Operations (2)
-| Tool | Description |
-|------|-------------|
-| `excel_set_formula` | Set a formula in a cell |
-| `excel_get_formula` | Get the formula from a cell |
-
-### Column/Row Operations (3)
-| Tool | Description |
-|------|-------------|
-| `excel_auto_fit_columns` | Auto-fit column widths to content |
-| `excel_set_column_width` | Set specific column width |
-| `excel_set_row_height` | Set specific row height |
-
-## Requirements
-
-- Python 3.12+
-- Windows operating system
-- Microsoft Excel installed
-- OpenAI API key (or compatible LLM provider)
-
-## Dependencies
-
-- [deepagents](https://github.com/anthropics/deepagents) - Agent framework
-- [pywin32](https://github.com/mhammond/pywin32) - Windows COM interface
-- [langchain-openai](https://github.com/langchain-ai/langchain) - LLM provider
-- [langgraph](https://github.com/langchain-ai/langgraph) - State graph and checkpointing
-
-## License
-
-MIT
