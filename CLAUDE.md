@@ -32,37 +32,53 @@ uv run pyright src-python/
 
 ## Architecture
 
-This is a **pywebview + React desktop app** — Python backend exposed to a React frontend via pywebview's JS bridge.
+This is a **pywebview + React desktop app** — Python FastAPI backend served locally, consumed by a React frontend via HTTP/SSE.
 
 ### Frontend (`src/`)
 
 - `src/App.tsx` — root with ErrorBoundary
-- `src/stores/chatStore.ts` — Zustand store; single source of truth for conversations, messages, streaming state
-- `src/services/pywebview.ts` — HTTP client for the FastAPI backend; uses SSE for streaming, REST for settings/dialogs
+- `src/router.tsx` — client-side routing
+- `src/stores/` — Zustand stores: `chatStore.ts`, `projectStore.ts`, `settingsStore.ts`, `fileTreeStore.ts`
+- `src/services/api.ts` — HTTP client for the FastAPI backend; uses SSE for streaming, REST for everything else
 - `src/components/chat/` — streaming chat UI (AssistantBubble, ToolGroupBlock, TaskPanel, ThinkingBlock)
 - `src/components/layout/` — AppLayout with TitleBar, sidebars, MainContent, Footer
+- `src/components/project/` — project management UI
+- `src/components/settings/` — settings panel
+- `src/locales/` — i18n strings (`en-US.json`, `zh-CN.json`)
 
 ### Backend (`src-python/`)
 
-- `src-python/main.py` — creates pywebview window, handles dev (connects to Vite URL) vs prod (loads `dist/`)
-- `src-python/server.py` — FastAPI app on port 8765; token-based auth (`EXCEL_AGENT_TOKEN` env var or auto-generated); endpoints:
-  - `GET /health` — no auth required
-  - `GET/POST /api/settings` — provider/model/api_key persisted to `~/.excel_agent/settings.json`
-  - `POST /api/stream` — SSE streaming endpoint that runs the agent and emits events
-  - `POST /api/dialog/open`, `POST /api/dialog/save` — file dialogs via pywebview
-- `src-python/agent/core.py` — `AgentCore`: initializes the DeepAgents LLM agent, streams queries via `astream_query()`, converts `MessageParser` events → `AgentEvent` types
-- `src-python/agent/config.py` — `AgentConfig` dataclass; default model is `"zhipu:glm-4.7"` (format: `provider:model_name`)
-- `src-python/agent/model_provider.py` — maps provider names to OpenAI-compatible API configs; supported: `zhipu`, `openai`, `deepseek`, `moonshot`
+- `src-python/main.py` — creates pywebview window; dev mode connects to Vite URL, prod loads `dist/`
+- `src-python/server.py` — FastAPI app factory + lifespan; registers routers; token auth via `EXCEL_AGENT_TOKEN` env var or auto-generated
+- `src-python/api/routers/` — route handlers:
+  - `stream.py` — `POST /api/stream` SSE endpoint; runs the agent
+  - `settings.py` — `GET/POST /api/settings`; persisted to `~/.excel_agent/settings.json`
+  - `projects.py` — project CRUD endpoints
+  - `files.py` — file browsing/dialog endpoints (`POST /api/dialog/open`, `POST /api/dialog/save`)
+  - `ws_watcher.py` — WebSocket endpoint for file-system watch events
+- `src-python/api/deps.py` — FastAPI dependency injection (auth, services)
+- `src-python/api/errors.py` — global exception handlers
+- `src-python/services/settings_service.py` — settings persistence
+- `src-python/services/project_service.py` — project management logic
+- `src-python/agent/core.py` — `AgentCore`: initializes the LangChain agent, streams queries via `astream_query()`, converts events → `AgentEvent` types
+- `src-python/agent/config.py` — `AgentConfig` dataclass; default model `"zhipu:glm-4.7"` (format: `provider:model_name`); reads `AGENTS.md` and `skills/` from project root
+- `src-python/agent/model_provider.py` — maps provider names to LangChain chat models; supported: `zhipu`, `openai`, `deepseek`, `moonshot`
 - `src-python/agent/events.py` — `AgentEvent` type definitions (EventType enum + event dataclasses)
-- `src-python/tools/excel_tools/` — excel tool implementations (range, worksheet, chart, pivot, VBA, etc.)
-- `src-python/libs/excel/` — utilities for working with Excel via `pywin32` (COM automation, cell references, A1/R1C1 notation)
-- `src-python/libs/deepagents/` — DeepAgents framework (vendored, not a pip package); contains `graph.py`, backends, and middleware
+- `src-python/agent/context.py` — agent context/state passed through runs
+- `src-python/agent/analysis_agent.py` — analysis sub-agent
+- `src-python/tools/excel_tools/` — Excel tool implementations (range, worksheet, chart, pivot, VBA, etc.)
+- `src-python/tools/base.py` — `ToolProvider` base class
+- `src-python/tools/schema_tool.py` — schema introspection tool
+- `src-python/tools/subagent.py` — sub-agent tool wrapper
+- `src-python/libs/excel/` — utilities for Excel via `pywin32` (COM automation, cell references, A1/R1C1 notation)
+- `src-python/libs/deepagents/` — DeepAgents framework (vendored); contains `graph.py`, backends, middleware
 - `src-python/libs/stream_msg_parser/` — streaming LLM message parser
 
 ### Dev orchestration
 
 - `dev.py` — starts uvicorn (FastAPI) on port 8765 with `--reload`, starts Vite on port 5173, then launches pywebview pointing at `http://localhost:5173`
 - `build.py` — builds React first, then compiles Python to a standalone exe via Nuitka (`--onefile`)
+- `AGENTS.md` — agent system prompt / instructions loaded at runtime
 
 ### Streaming event protocol
 
@@ -79,4 +95,5 @@ The Zustand store in `chatStore.ts` consumes these events and drives all UI upda
 
 - shadcn/ui (New York style) + Tailwind CSS v4
 - Add components: `bunx shadcn@latest add <component>` (MCP server configured in `.mcp.json`)
+- i18n via `src/i18n.ts` + `src/locales/`
 - Path alias: `@/` → `src/`
