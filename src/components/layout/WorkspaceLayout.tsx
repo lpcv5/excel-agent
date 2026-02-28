@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { Outlet } from "react-router"
-import type { PanelImperativeHandle } from "react-resizable-panels"
+import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels"
 import { LeftSidebar } from "./LeftSidebar"
 import { RightSidebar } from "./RightSidebar"
 import { useLayout } from "@/hooks/useLayout"
@@ -43,7 +43,7 @@ export function WorkspaceLayout() {
         maxSize="30%"
         collapsible
         collapsedSize="0%"
-        onResize={(size) => {
+        onResize={(size: PanelSize) => {
           const collapsed = size.asPercentage === 0
           if (collapsed && leftSidebarOpen) setLeftSidebarOpen(false)
           if (!collapsed && !leftSidebarOpen) setLeftSidebarOpen(true)
@@ -64,7 +64,7 @@ export function WorkspaceLayout() {
         maxSize="24%"
         collapsible
         collapsedSize="0%"
-        onResize={(size) => {
+        onResize={(size: PanelSize) => {
           const collapsed = size.asPercentage === 0
           if (collapsed && rightSidebarOpen) setRightSidebarOpen(false)
           if (!collapsed && !rightSidebarOpen) setRightSidebarOpen(true)
