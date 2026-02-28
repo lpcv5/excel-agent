@@ -22,6 +22,7 @@ export const router = createMemoryRouter([
   {
     path: "/",
     element: <AppLayout />,
+    HydrateFallback: () => null,
     children: [
       { index: true, loader: rootLoader, element: <WelcomeScreen /> },
       { path: "project/new", element: <CreateProjectScreen /> },
