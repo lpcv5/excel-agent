@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 export function AboutSection() {
   const { t } = useTranslation();
-  const version = (import.meta as Record<string, unknown> & { env?: Record<string, string> }).env?.VITE_APP_VERSION ?? "0.1.0";
+  const version = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_APP_VERSION ?? "0.1.0";
 
   return (
     <div>
