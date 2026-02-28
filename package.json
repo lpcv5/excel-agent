@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "pywebview": "uv run python src-python/main.py",
     "pywebview:prod": "uv run python src-python/main.py --prod",
-    "package": "uv run python build.py"
+    "package": "uv run python build.py",
+    "package:release": "uv run python build.py --release"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
